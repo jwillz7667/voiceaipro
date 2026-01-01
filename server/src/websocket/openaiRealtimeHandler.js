@@ -315,7 +315,6 @@ function sendSessionConfig(session) {
 function buildSessionConfig(cfg) {
   const sessionConfig = {
     type: 'realtime',  // Required for GA gpt-realtime API (options: 'realtime' or 'transcription')
-    modalities: ['audio', 'text'],
     instructions: cfg.instructions || getDefaultInstructions(),
     input_audio_format: 'pcm16',
     output_audio_format: 'pcm16',
