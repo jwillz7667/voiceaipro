@@ -313,36 +313,15 @@ function sendSessionConfig(session) {
  * Maps our configuration schema to OpenAI's expected format
  */
 function buildSessionConfig(cfg) {
+  // GA gpt-realtime API uses simplified session config
+  // See: https://platform.openai.com/docs/guides/realtime
   const sessionConfig = {
-    type: 'realtime',  // Required for GA gpt-realtime API (options: 'realtime' or 'transcription')
+    type: 'realtime',  // Required: 'realtime' or 'transcription'
     instructions: cfg.instructions || getDefaultInstructions(),
-    input_audio_format: 'pcm16',
-    output_audio_format: 'pcm16',
-    voice: cfg.voice || 'marin',
-    temperature: cfg.temperature ?? 0.8,
-    max_response_output_tokens: cfg.maxOutputTokens === 'inf' ? 'inf' : (cfg.maxOutputTokens ?? 4096),
+    voice: cfg.voice || 'marin',  // 'marin' or 'cedar' for best quality
   };
 
-  // Voice speed (1.0 is default)
-  if (cfg.voiceSpeed && cfg.voiceSpeed !== 1.0) {
-    sessionConfig.output_audio_speed = cfg.voiceSpeed;
-  }
-
-  // Input audio transcription
-  if (cfg.transcriptionModel) {
-    sessionConfig.input_audio_transcription = {
-      model: cfg.transcriptionModel,
-    };
-  }
-
-  // Noise reduction
-  if (cfg.noiseReduction) {
-    sessionConfig.input_audio_noise_reduction = {
-      type: cfg.noiseReduction,
-    };
-  }
-
-  // Turn detection (VAD)
+  // Turn detection (VAD) - simplified for GA API
   if (cfg.vadType === 'server_vad') {
     const vadConfig = cfg.vadConfig || {};
     sessionConfig.turn_detection = {
@@ -350,29 +329,22 @@ function buildSessionConfig(cfg) {
       threshold: vadConfig.threshold ?? 0.5,
       prefix_padding_ms: vadConfig.prefixPaddingMs ?? 300,
       silence_duration_ms: vadConfig.silenceDurationMs ?? 500,
-      create_response: vadConfig.createResponse ?? true,
-      interrupt_response: vadConfig.interruptResponse ?? true,
     };
-
-    if (vadConfig.idleTimeoutMs) {
-      sessionConfig.turn_detection.idle_timeout_ms = vadConfig.idleTimeoutMs;
-    }
   } else if (cfg.vadType === 'semantic_vad') {
     const vadConfig = cfg.vadConfig || {};
     sessionConfig.turn_detection = {
       type: 'semantic_vad',
       eagerness: vadConfig.eagerness ?? 'auto',
-      create_response: vadConfig.createResponse ?? true,
-      interrupt_response: vadConfig.interruptResponse ?? true,
     };
-  } else if (cfg.vadType === 'disabled') {
-    sessionConfig.turn_detection = null;
+  } else if (cfg.vadType === 'disabled' || cfg.vadType === 'none') {
+    sessionConfig.turn_detection = { type: 'none' };
   }
 
-  // Tools (function calling)
-  if (cfg.tools && cfg.tools.length > 0) {
-    sessionConfig.tools = cfg.tools;
-    sessionConfig.tool_choice = cfg.toolChoice || 'auto';
+  // Input audio transcription (optional)
+  if (cfg.transcriptionModel) {
+    sessionConfig.input_audio_transcription = {
+      model: cfg.transcriptionModel,
+    };
   }
 
   return sessionConfig;
