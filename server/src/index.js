@@ -71,6 +71,7 @@ app.use('/api/', apiLimiter);
 
 // Simple health check for Railway (no async operations)
 app.get('/health', (req, res) => {
+  appLogger.debug('Health check received');
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
