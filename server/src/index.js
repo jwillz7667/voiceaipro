@@ -69,14 +69,24 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-app.get('/health', async (req, res) => {
+// Simple health check for Railway (no async operations)
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
+// Detailed status endpoint (with async database check)
+app.get('/status', async (req, res) => {
   const dbConnected = await testConnection().catch(() => false);
   const poolStats = getPoolStats();
   const activeConnections = connectionManager.getStats();
 
   // Check Twilio SDK configuration
-  const twilioSdkConfigured = !!(config.twilio.apiKey && config.twilio.apiSecret && config.twilio.twimlAppSid);
-  const twilioWebhooksConfigured = !!(config.twilio.accountSid && config.twilio.authToken);
+  const twilioSdkConfigured = !!(config.twilio?.apiKey && config.twilio?.apiSecret && config.twilio?.twimlAppSid);
+  const twilioWebhooksConfigured = !!(config.twilio?.accountSid && config.twilio?.authToken);
 
   const status = dbConnected ? 'healthy' : 'degraded';
 
