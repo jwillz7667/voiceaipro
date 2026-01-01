@@ -41,9 +41,45 @@ struct VoiceAIProApp: App {
                 .modelContainer(sharedModelContainer)
                 .onAppear {
                     configureAppearance()
-                    container.initialize(modelContainer: sharedModelContainer)
+                    initializeServices()
                 }
                 .preferredColorScheme(.none) // Respect system setting
+        }
+    }
+
+    /// Initialize all services and connect them
+    private func initializeServices() {
+        // Initialize DI container with dependencies
+        container.initialize(modelContainer: sharedModelContainer, appState: appState)
+
+        // Connect AppDelegate with CallManager for VoIP push handling
+        appDelegate.callManager = container.callManager
+
+        // Initialize call manager asynchronously
+        Task {
+            do {
+                try await container.callManager.initialize()
+                print("[VoiceAIProApp] Call manager initialized successfully")
+            } catch {
+                print("[VoiceAIProApp] Failed to initialize call manager: \(error)")
+            }
+        }
+
+        // Register for push notifications
+        setupPushNotificationHandling()
+    }
+
+    /// Set up push notification observers
+    private func setupPushNotificationHandling() {
+        // Handle VoIP token
+        NotificationCenter.default.addObserver(
+            forName: .voipTokenReceived,
+            object: nil,
+            queue: .main
+        ) { [weak container] notification in
+            if let token = notification.userInfo?["token"] as? Data {
+                container?.callManager.registerForPushNotifications(deviceToken: token)
+            }
         }
     }
 

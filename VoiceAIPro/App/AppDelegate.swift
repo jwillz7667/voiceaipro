@@ -1,6 +1,7 @@
 import UIKit
 import PushKit
 import UserNotifications
+import CallKit
 
 /// App delegate handling system-level events, push notifications, and VoIP registration
 class AppDelegate: NSObject, UIApplicationDelegate {
@@ -13,23 +14,63 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     /// Standard push device token
     private(set) var pushDeviceToken: Data?
 
+    /// Reference to call manager for handling VoIP pushes
+    weak var callManager: CallManager?
+
+    /// Pending VoIP push that needs to be handled once services are ready
+    private var pendingVoIPPush: (payload: [AnyHashable: Any], completion: () -> Void)?
+
     // MARK: - Application Lifecycle
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        // Configure user notifications delegate
+        UNUserNotificationCenter.current().delegate = self
+
         // Register for push notifications
         registerForPushNotifications()
 
         // Register for VoIP push notifications
         registerForVoIPPushNotifications()
 
-        // Initialize Twilio Voice SDK (deferred until service initialization)
-        // TwilioVoiceService initialization happens in DIContainer
+        // Configure default audio session
+        do {
+            try AudioSessionManager.shared.configureForVoIP()
+        } catch {
+            print("[AppDelegate] Failed to configure audio session: \(error)")
+        }
 
         print("[AppDelegate] Application launched")
         return true
+    }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        // Clear badge count
+        application.applicationIconBadgeNumber = 0
+
+        // Handle any pending VoIP push
+        if let pending = pendingVoIPPush {
+            handleVoIPPush(payload: pending.payload, completion: pending.completion)
+            pendingVoIPPush = nil
+        }
+    }
+
+    func applicationWillResignActive(_ application: UIApplication) {
+        // App is going to background
+    }
+
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        // Ensure we keep audio session active for active calls
+        if callManager?.hasActiveCall == true {
+            // Request background task to keep call alive
+            var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+            backgroundTask = application.beginBackgroundTask {
+                application.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
+            }
+        }
     }
 
     func application(
@@ -115,19 +156,69 @@ extension AppDelegate: PKPushRegistryDelegate {
 
         print("[AppDelegate] Received VoIP push: \(payload.dictionaryPayload)")
 
-        // CRITICAL: Must report to CallKit within this callback
-        // Otherwise iOS will terminate the app for not handling VoIP push correctly
+        // CRITICAL: Must report to CallKit IMMEDIATELY within this callback
+        // iOS will terminate the app if we don't report to CallKit quickly
+        handleVoIPPush(payload: payload.dictionaryPayload, completion: completion)
+    }
+
+    /// Handle VoIP push notification - MUST report to CallKit immediately
+    private func handleVoIPPush(payload: [AnyHashable: Any], completion: @escaping () -> Void) {
+        // Check if call manager is ready
+        guard let callManager = callManager else {
+            // Store for later handling and still report to CallKit
+            pendingVoIPPush = (payload, completion)
+
+            // We MUST still report to CallKit even if services aren't ready
+            // Create a temporary incoming call report
+            reportEmergencyIncomingCall(payload: payload, completion: completion)
+            return
+        }
+
+        // Notify observers
         NotificationCenter.default.post(
             name: .incomingVoIPPush,
             object: nil,
-            userInfo: ["payload": payload.dictionaryPayload]
+            userInfo: ["payload": payload]
         )
 
-        // Completion will be called after CallKit reports the call
-        // This is handled by TwilioVoiceService
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Handle through call manager
+        Task { @MainActor in
+            await callManager.handleIncomingPush(payload: payload)
             completion()
         }
+    }
+
+    /// Emergency fallback to report incoming call to CallKit when services aren't ready
+    private func reportEmergencyIncomingCall(payload: [AnyHashable: Any], completion: @escaping () -> Void) {
+        // Extract caller info from payload
+        let from = payload["twi_from"] as? String ?? "Unknown"
+        let callUUID = UUID()
+
+        // Create provider configuration
+        let configuration = CXProviderConfiguration()
+        configuration.localizedName = Constants.App.name
+        configuration.supportsVideo = false
+        configuration.maximumCallsPerCallGroup = 1
+        configuration.supportedHandleTypes = [.phoneNumber]
+
+        let provider = CXProvider(configuration: configuration)
+
+        // Create call update
+        let update = CXCallUpdate()
+        update.remoteHandle = CXHandle(type: .phoneNumber, value: from)
+        update.localizedCallerName = from.formattedPhoneNumber
+        update.hasVideo = false
+
+        // Report the incoming call
+        provider.reportNewIncomingCall(with: callUUID, update: update) { error in
+            if let error = error {
+                print("[AppDelegate] Failed to report emergency incoming call: \(error)")
+            }
+            completion()
+        }
+
+        // Store reference to handle call actions
+        // This will be replaced by proper handling once CallManager is ready
     }
 
     func pushRegistry(

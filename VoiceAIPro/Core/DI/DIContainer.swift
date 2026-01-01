@@ -19,10 +19,17 @@ class DIContainer: ObservableObject {
     /// WebSocket client for real-time communication
     @Published private(set) var webSocketClient: WebSocketClientProtocol!
 
-    // Future services (to be implemented in Prompt 8)
-    // @Published private(set) var twilioService: TwilioVoiceServiceProtocol!
-    // @Published private(set) var callKitManager: CallKitManagerProtocol!
-    // @Published private(set) var audioSessionManager: AudioSessionManagerProtocol!
+    /// Twilio Voice service
+    @Published private(set) var twilioService: TwilioVoiceService!
+
+    /// CallKit manager
+    @Published private(set) var callKitManager: CallKitManager!
+
+    /// Audio session manager
+    var audioSessionManager: AudioSessionManager { AudioSessionManager.shared }
+
+    /// Call manager (high-level orchestrator)
+    @Published private(set) var callManager: CallManager!
 
     // MARK: - SwiftData
 
@@ -44,12 +51,35 @@ class DIContainer: ObservableObject {
         loadDeviceId()
     }
 
-    /// Initialize with model container (called from App)
-    func initialize(modelContainer: ModelContainer) {
+    /// Initialize with model container and app state (called from App)
+    func initialize(modelContainer: ModelContainer, appState: AppState) {
         self.modelContainer = modelContainer
 
-        // Re-initialize services that depend on model container
-        // This ensures all services have access to persistence
+        // Initialize call-related services
+        setupCallServices(appState: appState)
+    }
+
+    /// Set up call-related services (requires AppState)
+    private func setupCallServices(appState: AppState) {
+        // Create CallKit manager
+        callKitManager = CallKitManager()
+
+        // Create Twilio Voice service
+        twilioService = TwilioVoiceService(
+            apiClient: apiClient,
+            deviceId: deviceId
+        )
+
+        // Link Twilio service to CallKit manager
+        twilioService.setCallKitManager(callKitManager)
+
+        // Create Call manager (orchestrator)
+        callManager = CallManager(
+            twilioService: twilioService,
+            callKitManager: callKitManager,
+            apiClient: apiClient,
+            appState: appState
+        )
     }
 
     /// Set up for testing with mock services

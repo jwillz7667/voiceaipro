@@ -29,33 +29,83 @@ Alternatively, open `real.xcodeproj` in Xcode and use ⌘B to build, ⌘R to run
 - **Language:** Swift 5.0
 - **UI Framework:** SwiftUI
 - **Data Persistence:** SwiftData
-- **Minimum iOS:** 26.1
-- **Concurrency:** Swift Approachable Concurrency with MainActor default isolation
+- **Minimum iOS:** 17.0
+- **Concurrency:** Swift Concurrency with MainActor isolation
 
 ## Architecture
 
-This is a SwiftUI app using SwiftData for persistence:
+This is a SwiftUI app using MVVM architecture with SwiftData for persistence:
 
-- **realApp.swift** - App entry point, configures `ModelContainer` with schema
-- **ContentView.swift** - Main view with NavigationSplitView pattern
-- **Item.swift** - SwiftData `@Model` class for data persistence
+### App Layer
+- **VoiceAIProApp.swift** - Main entry point, configures ModelContainer and services
+- **AppDelegate.swift** - System events, PushKit, and VoIP push handling
+- **ContentView.swift** - Tab-based UI with all feature screens
 
-The app follows MVVM architecture as it evolves toward the full VoiceAI Pro implementation.
-
-## Planned Architecture (per VoiceAI_Technical_Specification.md)
-
-The full implementation will include:
-- **Core/Services/** - TwilioVoiceService, WebSocketService, AudioSessionManager, CallKitManager
+### Core Layer
 - **Core/Models/** - CallSession, RealtimeConfig, CallEvent, Prompt
-- **Features/** - Dashboard, Dialer, ActiveCall, Settings, EventLog, CallHistory, Recordings, Prompts
-- **Data/** - SwiftData models, APIClient, WebSocketClient
+- **Core/Services/** - TwilioVoiceService, CallKitManager, AudioSessionManager
+- **Core/Managers/** - AppState (global state), CallManager (orchestrator)
+- **Core/DI/** - DIContainer (dependency injection)
 
-## Key Dependencies (to be added)
+### Data Layer
+- **Data/SwiftData/** - CallRecord, SavedPrompt, EventLogEntry
+- **Data/Networking/** - APIClient, WebSocketClient (in DIContainer)
 
-- TwilioVoice (~> 6.13) - VoIP signaling and audio
-- SwiftData (native) - Local persistence
-- Combine (native) - Reactive programming
+### Utilities
+- **Utilities/Constants.swift** - API URLs, Twilio config, audio settings
+- **Utilities/Extensions/** - Color, View, Date, String extensions
+
+## Key Dependencies
+
+### Required - Add via Swift Package Manager in Xcode
+
+1. **TwilioVoice** (~> 6.13)
+   - URL: `https://github.com/twilio/twilio-voice-ios`
+   - Used for: VoIP signaling and audio
+
+To add: Xcode → File → Add Package Dependencies → Enter URL
+
+### Native Frameworks (no import needed)
+- SwiftData - Local persistence
+- Combine - Reactive programming
+- CallKit - Native call UI
+- PushKit - VoIP push notifications
+- AVFoundation - Audio session management
+
+## Service Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        CallManager                          │
+│              (High-level orchestrator)                      │
+└─────────────────────────────────────────────────────────────┘
+         │                    │                    │
+         ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│ TwilioVoice     │  │ CallKitManager  │  │ AudioSession    │
+│ Service         │  │                 │  │ Manager         │
+│                 │  │ - CXProvider    │  │                 │
+│ - TVOCall       │  │ - CXController  │  │ - AVAudioSession│
+│ - TVOCallInvite │  │ - CallKit UI    │  │ - Route mgmt    │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+```
+
+## VoIP Push Flow
+
+1. Server sends VoIP push via APNs
+2. PKPushRegistry receives push in AppDelegate
+3. AppDelegate calls CallManager.handleIncomingPush()
+4. CallManager → TwilioVoiceService → CallKitManager
+5. CallKit displays incoming call UI
+6. User answers → Audio session activated → Call connected
 
 ## Testing
 
 Uses Swift Testing framework (`import Testing`) with `@Test` attributes for unit tests.
+
+## Important Notes
+
+- VoIP push MUST report to CallKit immediately or iOS terminates the app
+- Audio session activation happens in CallKit delegate, not before
+- All call cleanup must happen in error paths (defensive programming)
+- TwilioVoiceService uses protocol abstractions for SDK types (allows testing without SDK)
