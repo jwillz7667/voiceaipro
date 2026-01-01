@@ -4,8 +4,10 @@ import SwiftData
 /// SwiftData model for persisted call records
 @Model
 final class CallRecord {
+    // MARK: - Attributes
+
     /// Unique identifier
-    var id: UUID
+    @Attribute(.unique) var id: UUID
 
     /// Twilio call SID
     var callSid: String?
@@ -31,11 +33,27 @@ final class CallRecord {
     /// Associated prompt ID
     var promptId: UUID?
 
-    /// Configuration snapshot as JSON
-    var configJson: String?
+    /// Prompt name (for display)
+    var promptName: String?
+
+    /// Configuration snapshot as Data
+    var configSnapshot: Data?
 
     /// Recording ID if available
     var recordingId: UUID?
+
+    /// When synced with server
+    var syncedAt: Date?
+
+    // MARK: - Relationships
+
+    /// Event log entries for this call
+    @Relationship(deleteRule: .cascade, inverse: \EventLogEntry.callRecord)
+    var events: [EventLogEntry]?
+
+    /// Transcript entries for this call
+    @Relationship(deleteRule: .cascade, inverse: \TranscriptEntry.callRecord)
+    var transcripts: [TranscriptEntry]?
 
     // MARK: - Initialization
 
@@ -49,8 +67,10 @@ final class CallRecord {
         endedAt: Date? = nil,
         durationSeconds: Int? = nil,
         promptId: UUID? = nil,
-        configJson: String? = nil,
-        recordingId: UUID? = nil
+        promptName: String? = nil,
+        configSnapshot: Data? = nil,
+        recordingId: UUID? = nil,
+        syncedAt: Date? = nil
     ) {
         self.id = id
         self.callSid = callSid
@@ -61,14 +81,15 @@ final class CallRecord {
         self.endedAt = endedAt
         self.durationSeconds = durationSeconds
         self.promptId = promptId
-        self.configJson = configJson
+        self.promptName = promptName
+        self.configSnapshot = configSnapshot
         self.recordingId = recordingId
+        self.syncedAt = syncedAt
     }
 
     /// Create from CallSession
     convenience init(from session: CallSession) {
         let configData = try? JSONEncoder().encode(session.config)
-        let configJson = configData.flatMap { String(data: $0, encoding: .utf8) }
 
         self.init(
             id: session.id,
@@ -80,7 +101,24 @@ final class CallRecord {
             endedAt: session.endedAt,
             durationSeconds: session.durationSeconds,
             promptId: session.promptId,
-            configJson: configJson
+            configSnapshot: configData
+        )
+    }
+
+    /// Create from server history item
+    convenience init(from item: CallHistoryItem) {
+        self.init(
+            id: item.id,
+            callSid: item.callSid,
+            direction: item.direction,
+            phoneNumber: item.phoneNumber,
+            status: item.status,
+            startedAt: item.startedAt,
+            endedAt: item.endedAt,
+            durationSeconds: item.durationSeconds,
+            promptName: item.promptName,
+            recordingId: item.recordingId,
+            syncedAt: Date()
         )
     }
 
@@ -112,11 +150,30 @@ final class CallRecord {
         startedAt.smartFormatted
     }
 
-    /// Parse config from JSON
-    var config: RealtimeConfig? {
-        guard let json = configJson,
-              let data = json.data(using: .utf8) else { return nil }
+    /// Parse config from snapshot
+    var decodedConfig: RealtimeConfig? {
+        guard let data = configSnapshot else { return nil }
         return try? JSONDecoder().decode(RealtimeConfig.self, from: data)
+    }
+
+    /// Whether this record is synced
+    var isSynced: Bool {
+        syncedAt != nil
+    }
+
+    /// Whether this call has a recording
+    var hasRecording: Bool {
+        recordingId != nil
+    }
+
+    /// Events count
+    var eventsCount: Int {
+        events?.count ?? 0
+    }
+
+    /// Transcript count
+    var transcriptCount: Int {
+        transcripts?.count ?? 0
     }
 
     /// Convert to CallSession
@@ -131,8 +188,27 @@ final class CallRecord {
             endedAt: endedAt,
             durationSeconds: durationSeconds,
             promptId: promptId,
-            config: config ?? .default
+            config: decodedConfig ?? .default
         )
+    }
+
+    // MARK: - Mutations
+
+    /// Update from session
+    func update(from session: CallSession) {
+        callSid = session.callSid
+        status = session.status.rawValue
+        endedAt = session.endedAt
+        durationSeconds = session.durationSeconds
+
+        if let configData = try? JSONEncoder().encode(session.config) {
+            configSnapshot = configData
+        }
+    }
+
+    /// Mark as synced
+    func markSynced() {
+        syncedAt = Date()
     }
 }
 
@@ -145,6 +221,24 @@ extension CallRecord {
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
         descriptor.fetchLimit = limit
+        return descriptor
+    }
+
+    /// Fetch call by ID
+    static func byId(_ id: UUID) -> FetchDescriptor<CallRecord> {
+        var descriptor = FetchDescriptor<CallRecord>(
+            predicate: #Predicate { $0.id == id }
+        )
+        descriptor.fetchLimit = 1
+        return descriptor
+    }
+
+    /// Fetch call by call SID
+    static func byCallSid(_ callSid: String) -> FetchDescriptor<CallRecord> {
+        var descriptor = FetchDescriptor<CallRecord>(
+            predicate: #Predicate { $0.callSid == callSid }
+        )
+        descriptor.fetchLimit = 1
         return descriptor
     }
 
@@ -161,6 +255,22 @@ extension CallRecord {
     static func callsWithRecordings() -> FetchDescriptor<CallRecord> {
         FetchDescriptor<CallRecord>(
             predicate: #Predicate { $0.recordingId != nil },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+    }
+
+    /// Fetch unsynced calls
+    static func unsyncedCalls() -> FetchDescriptor<CallRecord> {
+        FetchDescriptor<CallRecord>(
+            predicate: #Predicate { $0.syncedAt == nil },
+            sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+        )
+    }
+
+    /// Fetch calls in date range
+    static func calls(from startDate: Date, to endDate: Date) -> FetchDescriptor<CallRecord> {
+        FetchDescriptor<CallRecord>(
+            predicate: #Predicate { $0.startedAt >= startDate && $0.startedAt <= endDate },
             sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
         )
     }

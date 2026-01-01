@@ -83,12 +83,12 @@ struct VADConfigDTO: Codable {
         switch type?.lowercased() {
         case "server_vad":
             return .serverVAD(
-                threshold: threshold,
-                prefixPaddingMs: prefixPaddingMs,
-                silenceDurationMs: silenceDurationMs
+                threshold: threshold ?? 0.5,
+                prefixPadding: prefixPaddingMs ?? 300,
+                silenceDuration: silenceDurationMs ?? 500
             )
         case "semantic_vad":
-            let eagerLevel: SemanticVADEagerness
+            let eagerLevel: SemanticVADParams.Eagerness
             switch eagerness?.lowercased() {
             case "low": eagerLevel = .low
             case "medium": eagerLevel = .medium

@@ -195,8 +195,7 @@ extension AppDelegate: PKPushRegistryDelegate {
         let callUUID = UUID()
 
         // Create provider configuration
-        let configuration = CXProviderConfiguration()
-        configuration.localizedName = Constants.App.name
+        let configuration = CXProviderConfiguration(localizedName: Constants.App.name)
         configuration.supportsVideo = false
         configuration.maximumCallsPerCallGroup = 1
         configuration.supportedHandleTypes = [.phoneNumber]

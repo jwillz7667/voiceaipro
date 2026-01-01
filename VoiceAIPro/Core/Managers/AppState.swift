@@ -78,6 +78,24 @@ class AppState: ObservableObject {
 
     // MARK: - Call Management
 
+    /// Set the active call session
+    func setActiveCall(_ session: CallSession?) {
+        currentCall = session
+        isCallActive = session != nil
+        if let session = session {
+            callStatus = session.status
+        }
+    }
+
+    /// Add a CallEvent directly
+    func addCallEvent(_ event: CallEvent) {
+        events.append(event)
+        if events.count > maxEvents {
+            events.removeFirst(events.count - maxEvents)
+        }
+        updateSpeakingState(for: event.eventType)
+    }
+
     /// Start a new outbound call
     func startCall(to phoneNumber: String) {
         let session = CallSession.outbound(

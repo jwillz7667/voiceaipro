@@ -12,7 +12,7 @@ class AudioSessionManager: ObservableObject {
     // MARK: - Published Properties
 
     /// Current audio route description
-    @Published private(set) var currentRoute: AVAudioSession.RouteDescription
+    @Published private(set) var currentRoute: AVAudioSessionRouteDescription
 
     /// Whether speaker is enabled
     @Published private(set) var isSpeakerEnabled: Bool = false
@@ -82,7 +82,7 @@ class AudioSessionManager: ObservableObject {
         )
 
         // Set preferred settings
-        try audioSession.setPreferredSampleRate(Constants.Audio.sampleRate)
+        try audioSession.setPreferredSampleRate(Double(Constants.Audio.sampleRate))
         try audioSession.setPreferredIOBufferDuration(Constants.Audio.bufferDuration)
 
         updateRouteStatus()
@@ -126,7 +126,7 @@ class AudioSessionManager: ObservableObject {
     }
 
     /// Get the current audio route
-    func getCurrentRoute() -> AVAudioSession.RouteDescription {
+    func getCurrentRoute() -> AVAudioSessionRouteDescription {
         return audioSession.currentRoute
     }
 
@@ -360,7 +360,7 @@ enum AudioSessionError: LocalizedError {
 
 // MARK: - Audio Route Description Extension
 
-extension AVAudioSession.RouteDescription {
+extension AVAudioSessionRouteDescription {
     /// Description of current input
     var inputDescription: String {
         inputs.map { $0.portName }.joined(separator: ", ")

@@ -148,10 +148,7 @@ extension SavedPrompt {
     /// Fetch all prompts sorted by name
     static func allPrompts() -> FetchDescriptor<SavedPrompt> {
         FetchDescriptor<SavedPrompt>(
-            sortBy: [
-                SortDescriptor(\.isDefault, order: .reverse),
-                SortDescriptor(\.name)
-            ]
+            sortBy: [SortDescriptor(\.name)]
         )
     }
 

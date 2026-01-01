@@ -212,7 +212,7 @@ class CallManager: ObservableObject {
         webSocketService.onEvent = { [weak self] event in
             Task { @MainActor in
                 self?.eventProcessor.processEvent(event)
-                self?.appState?.addEvent(event)
+                self?.appState?.addCallEvent(event)
             }
         }
 
@@ -434,7 +434,7 @@ class CallManager: ObservableObject {
 
         // Update session
         if var session = currentSession {
-            session.status = .inProgress
+            session.status = .connected
             session.callSid = call.sid
             currentSession = session
             appState?.setActiveCall(session)
@@ -512,15 +512,15 @@ class CallManager: ObservableObject {
             currentSession = session
 
             switch newStatus {
-            case .inProgress:
+            case .connected:
                 callState = .connected
-            case .ended, .completed:
+            case .ended:
                 callState = .idle
                 handleCallDisconnected(nil, error: nil)
             case .failed:
                 let error = CallManagerError.connectionFailed("Call failed on server")
                 handleCallDisconnected(nil, error: error)
-            default:
+            case .initiating, .ringing:
                 break
             }
         }
@@ -699,8 +699,10 @@ extension CallSession {
             phoneNumber: phoneNumber,
             status: .initiating,
             startedAt: Date(),
-            config: config,
-            promptId: promptId
+            endedAt: nil,
+            durationSeconds: nil,
+            promptId: promptId,
+            config: config
         )
     }
 
@@ -716,6 +718,9 @@ extension CallSession {
             phoneNumber: phoneNumber,
             status: .ringing,
             startedAt: Date(),
+            endedAt: nil,
+            durationSeconds: nil,
+            promptId: nil,
             config: .default
         )
     }

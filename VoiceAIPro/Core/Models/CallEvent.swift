@@ -96,8 +96,21 @@ enum EventType: String, Codable, CaseIterable {
     case responseCreated = "response.created"
     case responseAudioDelta = "response.output_audio.delta"
     case responseAudioDone = "response.output_audio.done"
+    case responseTextDelta = "response.text.delta"
+    case responseTextDone = "response.text.done"
     case responseDone = "response.done"
     case responseCancelled = "response.cancelled"
+    case responseFunctionCallArgumentsDelta = "response.function_call_arguments.delta"
+    case responseFunctionCallArgumentsDone = "response.function_call_arguments.done"
+
+    // Conversation Events
+    case conversationItemCreated = "conversation.item.created"
+    case conversationItemDeleted = "conversation.item.deleted"
+
+    // Input Audio Transcription Events
+    case transcriptionCompleted = "input_audio_buffer.transcription.completed"
+    case inputAudioTranscriptionCompleted = "input_audio.transcription.completed"
+    case inputAudioTranscriptionFailed = "input_audio.transcription.failed"
 
     // Error Events
     case error = "error"
@@ -128,8 +141,17 @@ enum EventType: String, Codable, CaseIterable {
         case .responseCreated: return "Response Started"
         case .responseAudioDelta: return "Audio Chunk"
         case .responseAudioDone: return "Audio Complete"
+        case .responseTextDelta: return "Text Delta"
+        case .responseTextDone: return "Text Done"
         case .responseDone: return "Response Complete"
         case .responseCancelled: return "Response Cancelled"
+        case .responseFunctionCallArgumentsDelta: return "Function Args Delta"
+        case .responseFunctionCallArgumentsDone: return "Function Args Done"
+        case .conversationItemCreated: return "Item Created"
+        case .conversationItemDeleted: return "Item Deleted"
+        case .transcriptionCompleted: return "Transcription Done"
+        case .inputAudioTranscriptionCompleted: return "Audio Transcription"
+        case .inputAudioTranscriptionFailed: return "Transcription Failed"
         case .error: return "Error"
         case .rateLimitsUpdated: return "Rate Limits"
         case .callConnected: return "Call Connected"
@@ -156,8 +178,17 @@ enum EventType: String, Codable, CaseIterable {
         case .responseCreated: return "AI responding..."
         case .responseAudioDelta: return "Audio streaming"
         case .responseAudioDone: return "Audio done"
+        case .responseTextDelta: return "Text streaming"
+        case .responseTextDone: return "Text complete"
         case .responseDone: return "Response complete"
         case .responseCancelled: return "Interrupted"
+        case .responseFunctionCallArgumentsDelta: return "Building args"
+        case .responseFunctionCallArgumentsDone: return "Args complete"
+        case .conversationItemCreated: return "Item added"
+        case .conversationItemDeleted: return "Item removed"
+        case .transcriptionCompleted: return "Transcript ready"
+        case .inputAudioTranscriptionCompleted: return "Audio transcribed"
+        case .inputAudioTranscriptionFailed: return "Transcription failed"
         case .error: return "Error occurred"
         case .rateLimitsUpdated: return "Rate limits"
         case .callConnected: return "Call connected"
@@ -176,12 +207,17 @@ enum EventType: String, Codable, CaseIterable {
         case .speechStarted: return "waveform"
         case .speechStopped: return "waveform.slash"
         case .audioBufferCommitted, .audioBufferCleared: return "arrow.up.circle"
-        case .inputTranscriptionCompleted: return "text.bubble"
+        case .inputTranscriptionCompleted, .transcriptionCompleted, .inputAudioTranscriptionCompleted: return "text.bubble"
+        case .inputAudioTranscriptionFailed: return "text.bubble.fill"
         case .outputTranscriptDelta, .outputTranscriptDone: return "text.bubble.fill"
         case .responseCreated: return "brain"
         case .responseAudioDelta, .responseAudioDone: return "speaker.wave.2"
+        case .responseTextDelta, .responseTextDone: return "text.alignleft"
         case .responseDone: return "checkmark.circle"
         case .responseCancelled: return "xmark.circle"
+        case .responseFunctionCallArgumentsDelta, .responseFunctionCallArgumentsDone: return "function"
+        case .conversationItemCreated: return "plus.circle"
+        case .conversationItemDeleted: return "minus.circle"
         case .error: return "exclamationmark.triangle"
         case .rateLimitsUpdated: return "gauge"
         case .callConnected: return "phone.fill"
@@ -200,10 +236,14 @@ enum EventType: String, Codable, CaseIterable {
             return .session
         case .speechStarted, .speechStopped, .audioBufferCommitted, .audioBufferCleared:
             return .audio
-        case .inputTranscriptionCompleted, .outputTranscriptDelta, .outputTranscriptDone:
+        case .inputTranscriptionCompleted, .outputTranscriptDelta, .outputTranscriptDone,
+             .transcriptionCompleted, .inputAudioTranscriptionCompleted, .inputAudioTranscriptionFailed:
             return .transcript
-        case .responseCreated, .responseAudioDelta, .responseAudioDone, .responseDone, .responseCancelled:
+        case .responseCreated, .responseAudioDelta, .responseAudioDone, .responseDone, .responseCancelled,
+             .responseTextDelta, .responseTextDone, .responseFunctionCallArgumentsDelta, .responseFunctionCallArgumentsDone:
             return .response
+        case .conversationItemCreated, .conversationItemDeleted:
+            return .session
         case .error, .rateLimitsUpdated, .connectionDropped:
             return .error
         case .callConnected, .callDisconnected, .recordingSaved, .twilioMark:
@@ -232,6 +272,7 @@ enum EventCategory: String, CaseIterable, Identifiable {
     case response
     case error
     case call
+    case other
 
     var id: String { rawValue }
 
@@ -247,6 +288,7 @@ enum EventCategory: String, CaseIterable, Identifiable {
         case .response: return "brain"
         case .error: return "exclamationmark.triangle"
         case .call: return "phone"
+        case .other: return "questionmark.circle"
         }
     }
 }

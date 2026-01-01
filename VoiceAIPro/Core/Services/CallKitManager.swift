@@ -1,6 +1,8 @@
 import Foundation
 import CallKit
 import AVFoundation
+import Combine
+import UIKit
 
 /// Manages CallKit integration for native iOS call UI
 /// Handles reporting calls to the system and processing user actions
@@ -57,8 +59,7 @@ class CallKitManager: NSObject, ObservableObject {
 
     /// CallKit provider configuration
     static var providerConfiguration: CXProviderConfiguration {
-        let config = CXProviderConfiguration()
-        config.localizedName = Constants.App.name
+        let config = CXProviderConfiguration(localizedName: Constants.App.name)
         config.supportsVideo = false
         config.maximumCallsPerCallGroup = 1
         config.maximumCallGroups = 1

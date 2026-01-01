@@ -18,7 +18,10 @@ struct VoiceAIProApp: App {
         let schema = Schema([
             CallRecord.self,
             SavedPrompt.self,
-            EventLogEntry.self
+            EventLogEntry.self,
+            TranscriptEntry.self,
+            RecordingMetadata.self,
+            UserSettings.self
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

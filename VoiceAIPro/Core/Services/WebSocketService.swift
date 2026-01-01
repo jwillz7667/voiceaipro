@@ -228,9 +228,13 @@ class WebSocketService: ObservableObject {
         controlReceiveTask = Task {
             guard let client = controlClient else { return }
 
-            for await message in await client.receive() {
-                if Task.isCancelled { break }
-                handleControlMessage(message)
+            do {
+                for try await message in await client.receive() {
+                    if Task.isCancelled { break }
+                    handleControlMessage(message)
+                }
+            } catch {
+                print("[WebSocketService] Control receive error: \(error)")
             }
 
             // Connection ended
@@ -248,9 +252,13 @@ class WebSocketService: ObservableObject {
         eventReceiveTask = Task {
             guard let client = eventClient else { return }
 
-            for await message in await client.receive() {
-                if Task.isCancelled { break }
-                handleEventMessage(message)
+            do {
+                for try await message in await client.receive() {
+                    if Task.isCancelled { break }
+                    handleEventMessage(message)
+                }
+            } catch {
+                print("[WebSocketService] Event receive error: \(error)")
             }
 
             // Connection ended

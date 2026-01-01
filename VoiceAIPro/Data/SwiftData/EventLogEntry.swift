@@ -4,17 +4,10 @@ import SwiftData
 /// SwiftData model for persisted event log entries
 @Model
 final class EventLogEntry {
+    // MARK: - Attributes
+
     /// Unique identifier
-    var id: UUID
-
-    /// Associated call record ID
-    var callRecordId: UUID
-
-    /// Twilio call SID
-    var callSid: String
-
-    /// Event timestamp
-    var timestamp: Date
+    @Attribute(.unique) var id: UUID
 
     /// Event type
     var eventType: String
@@ -22,39 +15,52 @@ final class EventLogEntry {
     /// Event direction (incoming/outgoing)
     var direction: String
 
-    /// Event payload as JSON
-    var payloadJson: String?
+    /// Event payload as JSON data
+    var payloadData: Data?
+
+    /// Event timestamp
+    var timestamp: Date
+
+    /// Call SID for reference
+    var callSid: String?
+
+    // MARK: - Relationships
+
+    /// Parent call record
+    var callRecord: CallRecord?
 
     // MARK: - Initialization
 
     init(
         id: UUID = UUID(),
-        callRecordId: UUID,
-        callSid: String,
-        timestamp: Date = Date(),
         eventType: String,
         direction: String,
-        payloadJson: String? = nil
+        payloadData: Data? = nil,
+        timestamp: Date = Date(),
+        callSid: String? = nil
     ) {
         self.id = id
-        self.callRecordId = callRecordId
-        self.callSid = callSid
-        self.timestamp = timestamp
         self.eventType = eventType
         self.direction = direction
-        self.payloadJson = payloadJson
+        self.payloadData = payloadData
+        self.timestamp = timestamp
+        self.callSid = callSid
     }
 
     /// Create from CallEvent
-    convenience init(from event: CallEvent, callRecordId: UUID) {
+    convenience init(from event: CallEvent) {
+        var payloadData: Data? = nil
+        if let payload = event.payload {
+            payloadData = payload.data(using: .utf8)
+        }
+
         self.init(
             id: event.id,
-            callRecordId: callRecordId,
-            callSid: event.callId,
-            timestamp: event.timestamp,
             eventType: event.eventType.rawValue,
             direction: event.direction.rawValue,
-            payloadJson: event.payload
+            payloadData: payloadData,
+            timestamp: event.timestamp,
+            callSid: event.callId
         )
     }
 
@@ -75,11 +81,16 @@ final class EventLogEntry {
         timestamp.preciseTimeFormatted
     }
 
-    /// Parse payload
-    var payload: [String: Any]? {
-        guard let json = payloadJson,
-              let data = json.data(using: .utf8) else { return nil }
+    /// Parse payload as dictionary
+    var decodedPayload: [String: Any]? {
+        guard let data = payloadData else { return nil }
         return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    }
+
+    /// Payload as string
+    var payloadString: String? {
+        guard let data = payloadData else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 
     /// Convert to CallEvent
@@ -89,10 +100,10 @@ final class EventLogEntry {
         return CallEvent(
             id: id,
             timestamp: timestamp,
-            callId: callSid,
+            callId: callSid ?? "",
             eventType: type,
             direction: eventDirection,
-            payload: payloadJson
+            payload: payloadString
         )
     }
 
@@ -105,23 +116,20 @@ final class EventLogEntry {
     var icon: String {
         type?.icon ?? "questionmark.circle"
     }
+
+    /// Category of the event
+    var category: EventCategory {
+        type?.category ?? .other
+    }
 }
 
 // MARK: - Fetch Descriptors
 
 extension EventLogEntry {
-    /// Fetch events for a specific call
+    /// Fetch events for a specific call SID
     static func events(forCallSid callSid: String) -> FetchDescriptor<EventLogEntry> {
         FetchDescriptor<EventLogEntry>(
             predicate: #Predicate { $0.callSid == callSid },
-            sortBy: [SortDescriptor(\.timestamp)]
-        )
-    }
-
-    /// Fetch events for a specific call record
-    static func events(forCallRecordId recordId: UUID) -> FetchDescriptor<EventLogEntry> {
-        FetchDescriptor<EventLogEntry>(
-            predicate: #Predicate { $0.callRecordId == recordId },
             sortBy: [SortDescriptor(\.timestamp)]
         )
     }
@@ -141,6 +149,23 @@ extension EventLogEntry {
         return FetchDescriptor<EventLogEntry>(
             predicate: #Predicate { $0.eventType == errorType },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+    }
+
+    /// Fetch events by type
+    static func events(ofType type: EventType) -> FetchDescriptor<EventLogEntry> {
+        let typeValue = type.rawValue
+        return FetchDescriptor<EventLogEntry>(
+            predicate: #Predicate { $0.eventType == typeValue },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+    }
+
+    /// Fetch events in date range
+    static func events(from startDate: Date, to endDate: Date) -> FetchDescriptor<EventLogEntry> {
+        FetchDescriptor<EventLogEntry>(
+            predicate: #Predicate { $0.timestamp >= startDate && $0.timestamp <= endDate },
+            sortBy: [SortDescriptor(\.timestamp)]
         )
     }
 }

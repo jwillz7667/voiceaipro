@@ -158,30 +158,3 @@ enum CallStatus: String, Codable, CaseIterable {
     }
 }
 
-// MARK: - String Extension for Phone Formatting
-
-private extension String {
-    var formattedPhoneNumber: String {
-        // Remove all non-numeric characters
-        let digits = self.filter { $0.isNumber }
-
-        guard digits.count >= 10 else { return self }
-
-        // Handle US phone numbers
-        if digits.count == 10 {
-            let areaCode = digits.prefix(3)
-            let prefix = digits.dropFirst(3).prefix(3)
-            let suffix = digits.suffix(4)
-            return "(\(areaCode)) \(prefix)-\(suffix)"
-        } else if digits.count == 11 && digits.hasPrefix("1") {
-            let cleaned = String(digits.dropFirst())
-            let areaCode = cleaned.prefix(3)
-            let prefix = cleaned.dropFirst(3).prefix(3)
-            let suffix = cleaned.suffix(4)
-            return "+1 (\(areaCode)) \(prefix)-\(suffix)"
-        }
-
-        // Return as-is for international numbers
-        return self
-    }
-}

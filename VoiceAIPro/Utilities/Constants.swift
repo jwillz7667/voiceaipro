@@ -2,6 +2,13 @@ import Foundation
 
 /// Application-wide constants
 enum Constants {
+    // MARK: - App Info
+
+    enum App {
+        static let name = "VoiceAI Pro"
+        static let version = "1.0.0"
+    }
+
     // MARK: - API Configuration
 
     enum API {
@@ -15,6 +22,7 @@ enum Constants {
         /// API endpoints
         enum Endpoints {
             static let token = "/api/token"
+            static let calls = "/api/calls"
             static let callsOutgoing = "/api/calls/outgoing"
             static let callsEnd = "/api/calls/:id/end"
             static let callsHistory = "/api/calls/history"
@@ -64,6 +72,9 @@ enum Constants {
 
         /// Audio buffer size in samples (~100ms at 24kHz)
         static let bufferSampleCount = 2400
+
+        /// Audio buffer duration in seconds
+        static let bufferDuration: Double = 0.1
     }
 
     // MARK: - UI Configuration

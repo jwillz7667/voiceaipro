@@ -108,7 +108,7 @@ class DIContainer: ObservableObject {
             deviceId: deviceId
         )
 
-        webSocketClient = WebSocketClient(
+        webSocketClient = DIWebSocketClient(
             baseURL: Constants.API.wsURL
         )
     }
@@ -144,7 +144,7 @@ class DIContainer: ObservableObject {
                 baseURL: "https://staging-server.railway.app",
                 deviceId: deviceId
             )
-            webSocketClient = WebSocketClient(
+            webSocketClient = DIWebSocketClient(
                 baseURL: "wss://staging-server.railway.app"
             )
         case .testing:
@@ -405,8 +405,8 @@ class APIClient: APIClientProtocol {
     }
 }
 
-/// WebSocket client implementation
-class WebSocketClient: WebSocketClientProtocol {
+/// WebSocket client implementation for DI
+class DIWebSocketClient: WebSocketClientProtocol {
     private let baseURL: String
     private var webSocket: URLSessionWebSocketTask?
     private var messageHandler: (([String: Any]) -> Void)?
