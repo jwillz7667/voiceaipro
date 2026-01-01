@@ -12,12 +12,30 @@ enum Constants {
     // MARK: - API Configuration
 
     enum API {
+        /// Whether to use local development server
+        #if DEBUG
+        static let useLocalServer = true
+        #else
+        static let useLocalServer = false
+        #endif
+
+        /// Production server URL (Railway deployment)
+        static let productionURL = "https://voiceaipro-production.up.railway.app"
+        static let productionWSURL = "wss://voiceaipro-production.up.railway.app"
+
+        /// Local development server URL
+        static let localURL = "http://localhost:3000"
+        static let localWSURL = "ws://localhost:3000"
+
         /// Base URL for the REST API server
-        /// Update this to your Railway deployment URL
-        static let baseURL = "https://your-server.railway.app"
+        static var baseURL: String {
+            useLocalServer ? localURL : productionURL
+        }
 
         /// WebSocket URL for real-time communication
-        static let wsURL = "wss://your-server.railway.app"
+        static var wsURL: String {
+            useLocalServer ? localWSURL : productionWSURL
+        }
 
         /// API endpoints
         enum Endpoints {

@@ -110,6 +110,79 @@ router.get('/active', (req, res) => {
   });
 });
 
+// Call history - must be before /:callSid to avoid route conflict
+router.get('/history', async (req, res) => {
+  try {
+    const {
+      limit = 50,
+      offset = 0,
+      user_id,
+      direction,
+      status,
+    } = req.query;
+
+    let queryText = `
+      SELECT id, call_sid, direction, phone_number, status,
+             started_at, ended_at, duration_seconds
+      FROM call_sessions
+      WHERE 1=1
+    `;
+    const params = [];
+    let paramIndex = 1;
+
+    if (user_id) {
+      queryText += ` AND user_id = $${paramIndex++}`;
+      params.push(user_id);
+    }
+
+    if (direction) {
+      queryText += ` AND direction = $${paramIndex++}`;
+      params.push(direction);
+    }
+
+    if (status) {
+      queryText += ` AND status = $${paramIndex++}`;
+      params.push(status);
+    }
+
+    queryText += ` ORDER BY started_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+    params.push(parseInt(limit), parseInt(offset));
+
+    const result = await query(queryText, params);
+
+    const countResult = await query(
+      'SELECT COUNT(*) as total FROM call_sessions WHERE 1=1'
+    );
+
+    res.json({
+      calls: result.rows.map((row) => ({
+        id: row.id,
+        call_sid: row.call_sid,
+        direction: row.direction,
+        phone_number: row.phone_number,
+        status: row.status,
+        started_at: row.started_at,
+        ended_at: row.ended_at,
+        duration_seconds: row.duration_seconds,
+      })),
+      pagination: {
+        total: parseInt(countResult.rows[0].total),
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to get call history', error);
+    res.status(500).json({
+      error: {
+        code: 'GET_HISTORY_FAILED',
+        message: 'Failed to retrieve call history',
+        details: error.message,
+      },
+    });
+  }
+});
+
 router.get('/:callSid', async (req, res) => {
   try {
     const { callSid } = req.params;
@@ -344,78 +417,6 @@ router.get('/:callSid/full', async (req, res) => {
       error: {
         code: 'GET_CALL_FAILED',
         message: 'Failed to retrieve call information',
-        details: error.message,
-      },
-    });
-  }
-});
-
-router.get('/history', async (req, res) => {
-  try {
-    const {
-      limit = 50,
-      offset = 0,
-      user_id,
-      direction,
-      status,
-    } = req.query;
-
-    let queryText = `
-      SELECT id, call_sid, direction, phone_number, status,
-             started_at, ended_at, duration_seconds
-      FROM call_sessions
-      WHERE 1=1
-    `;
-    const params = [];
-    let paramIndex = 1;
-
-    if (user_id) {
-      queryText += ` AND user_id = $${paramIndex++}`;
-      params.push(user_id);
-    }
-
-    if (direction) {
-      queryText += ` AND direction = $${paramIndex++}`;
-      params.push(direction);
-    }
-
-    if (status) {
-      queryText += ` AND status = $${paramIndex++}`;
-      params.push(status);
-    }
-
-    queryText += ` ORDER BY started_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    params.push(parseInt(limit), parseInt(offset));
-
-    const result = await query(queryText, params);
-
-    const countResult = await query(
-      'SELECT COUNT(*) as total FROM call_sessions WHERE 1=1'
-    );
-
-    res.json({
-      calls: result.rows.map((row) => ({
-        id: row.id,
-        call_sid: row.call_sid,
-        direction: row.direction,
-        phone_number: row.phone_number,
-        status: row.status,
-        started_at: row.started_at,
-        ended_at: row.ended_at,
-        duration_seconds: row.duration_seconds,
-      })),
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      },
-    });
-  } catch (error) {
-    logger.error('Failed to get call history', error);
-    res.status(500).json({
-      error: {
-        code: 'GET_HISTORY_FAILED',
-        message: 'Failed to retrieve call history',
         details: error.message,
       },
     });

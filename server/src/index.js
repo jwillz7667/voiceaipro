@@ -280,8 +280,14 @@ async function startServer() {
     const dbConnected = await testConnection();
 
     if (!dbConnected) {
-      appLogger.error('Database connection failed');
-      process.exit(1);
+      if (config.isProduction()) {
+        appLogger.error('Database connection failed - required in production');
+        process.exit(1);
+      } else {
+        appLogger.warn('Database connection failed - running in degraded mode (some features disabled)');
+        appLogger.warn('For full functionality, set DATABASE_URL to your public Railway PostgreSQL URL');
+        appLogger.warn('Get the public URL from Railway Dashboard → PostgreSQL → Connect → Public URL');
+      }
     }
 
     server.listen(config.port, () => {
