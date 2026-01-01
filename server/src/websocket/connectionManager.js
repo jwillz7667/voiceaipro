@@ -30,7 +30,7 @@ class CallSession {
         interruptResponse: true,
       },
       noiseReduction: null,
-      transcriptionModel: 'whisper-1',
+      transcriptionModel: 'gpt-4o-transcribe',
       temperature: 0.8,
       maxOutputTokens: 4096,
       instructions: '',

@@ -297,6 +297,9 @@ function sendSessionConfig(session) {
     callSid: session.callSid,
     voice: sessionConfig.voice,
     vadType: sessionConfig.turn_detection?.type || 'disabled',
+    transcriptionModel: sessionConfig.input_audio_transcription?.model,
+    instructionsLength: sessionConfig.instructions?.length,
+    fullConfig: JSON.stringify(sessionConfig),
   });
 
   // Log to database
@@ -824,12 +827,15 @@ function handleRateLimitsUpdated(session, message, state) {
 function handleError(session, message, state) {
   const error = message.error;
 
+  // Log full error object to diagnose issues
   logger.error('OpenAI error', {
     callSid: session.callSid,
     type: error?.type,
     code: error?.code,
     message: error?.message,
+    text: error?.text,
     param: error?.param,
+    fullError: JSON.stringify(error),
   });
 
   session.broadcastEvent('error', {
