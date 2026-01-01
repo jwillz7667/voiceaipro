@@ -313,39 +313,13 @@ function sendSessionConfig(session) {
  * Maps our configuration schema to OpenAI's expected format
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime API uses simplified session config
+  // GA gpt-realtime API uses minimal session config
+  // Most settings (voice, VAD, etc.) are configured via the WebSocket URL or are defaults
   // See: https://platform.openai.com/docs/guides/realtime
-  // Note: voice is set via model selection (gpt-realtime), not session.update
   const sessionConfig = {
     type: 'realtime',  // Required: 'realtime' or 'transcription'
     instructions: cfg.instructions || getDefaultInstructions(),
   };
-
-  // Turn detection (VAD) - simplified for GA API
-  if (cfg.vadType === 'server_vad') {
-    const vadConfig = cfg.vadConfig || {};
-    sessionConfig.turn_detection = {
-      type: 'server_vad',
-      threshold: vadConfig.threshold ?? 0.5,
-      prefix_padding_ms: vadConfig.prefixPaddingMs ?? 300,
-      silence_duration_ms: vadConfig.silenceDurationMs ?? 500,
-    };
-  } else if (cfg.vadType === 'semantic_vad') {
-    const vadConfig = cfg.vadConfig || {};
-    sessionConfig.turn_detection = {
-      type: 'semantic_vad',
-      eagerness: vadConfig.eagerness ?? 'auto',
-    };
-  } else if (cfg.vadType === 'disabled' || cfg.vadType === 'none') {
-    sessionConfig.turn_detection = { type: 'none' };
-  }
-
-  // Input audio transcription (optional)
-  if (cfg.transcriptionModel) {
-    sessionConfig.input_audio_transcription = {
-      model: cfg.transcriptionModel,
-    };
-  }
 
   return sessionConfig;
 }
