@@ -293,6 +293,81 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.post('/:id/default', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { user_id } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'user_id is required',
+        },
+      });
+    }
+
+    // Clear existing user defaults and set new one
+    await transaction(async (client) => {
+      // Clear existing defaults for this user
+      await client.query(
+        'UPDATE prompts SET is_default = false, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND is_default = true',
+        [user_id]
+      );
+
+      // Set new default
+      const result = await client.query(
+        `UPDATE prompts SET is_default = true, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
+         RETURNING id, user_id, name, instructions, voice, vad_config, is_default, created_at, updated_at`,
+        [id, user_id]
+      );
+
+      if (result.rows.length === 0) {
+        throw new Error('PROMPT_NOT_FOUND');
+      }
+
+      return result.rows[0];
+    }).then((row) => {
+      logger.info('Default prompt set', { promptId: id, userId: user_id });
+
+      res.json({
+        success: true,
+        prompt: {
+          id: row.id,
+          user_id: row.user_id,
+          name: row.name,
+          instructions: row.instructions,
+          voice: row.voice,
+          vad_config: row.vad_config,
+          is_default: row.is_default,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        },
+      });
+    }).catch((error) => {
+      if (error.message === 'PROMPT_NOT_FOUND') {
+        return res.status(404).json({
+          error: {
+            code: 'PROMPT_NOT_FOUND',
+            message: `Prompt not found or not accessible: ${id}`,
+          },
+        });
+      }
+      throw error;
+    });
+  } catch (error) {
+    logger.error('Failed to set default prompt', { id: req.params.id, error });
+    res.status(500).json({
+      error: {
+        code: 'SET_DEFAULT_FAILED',
+        message: 'Failed to set default prompt',
+        details: error.message,
+      },
+    });
+  }
+});
+
 router.post('/:id/duplicate', async (req, res) => {
   try {
     const { id } = req.params;

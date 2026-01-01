@@ -113,11 +113,12 @@ router.get('/active', (req, res) => {
 router.get('/:callSid', async (req, res) => {
   try {
     const { callSid } = req.params;
+    const { include } = req.query; // include=events,transcripts,recordings for full details
 
     const activeSession = connectionManager.getSession(callSid);
 
     if (activeSession) {
-      return res.json({
+      const response = {
         source: 'active',
         call: {
           id: activeSession.id,
@@ -131,14 +132,31 @@ router.get('/:callSid', async (req, res) => {
           event_count: activeSession.events.length,
           transcript_count: activeSession.transcripts.length,
         },
-      });
+      };
+
+      // Include extra data if requested
+      if (include) {
+        const includes = include.split(',');
+        if (includes.includes('events')) {
+          response.events = activeSession.events;
+        }
+        if (includes.includes('transcripts')) {
+          response.transcripts = activeSession.transcripts;
+        }
+      }
+
+      return res.json(response);
     }
 
+    // Get from database
     const result = await query(
-      `SELECT id, call_sid, direction, phone_number, status,
-              started_at, ended_at, duration_seconds, config_snapshot
-       FROM call_sessions
-       WHERE call_sid = $1`,
+      `SELECT cs.id, cs.call_sid, cs.direction, cs.phone_number, cs.status,
+              cs.started_at, cs.ended_at, cs.duration_seconds, cs.config_snapshot,
+              cs.user_id, cs.prompt_id,
+              p.name as prompt_name, p.instructions as prompt_instructions, p.voice as prompt_voice
+       FROM call_sessions cs
+       LEFT JOIN prompts p ON cs.prompt_id = p.id
+       WHERE cs.call_sid = $1`,
       [callSid]
     );
 
@@ -152,7 +170,7 @@ router.get('/:callSid', async (req, res) => {
     }
 
     const row = result.rows[0];
-    res.json({
+    const response = {
       source: 'database',
       call: {
         id: row.id,
@@ -164,10 +182,164 @@ router.get('/:callSid', async (req, res) => {
         ended_at: row.ended_at,
         duration_seconds: row.duration_seconds,
         config: row.config_snapshot,
+        user_id: row.user_id,
+        prompt: row.prompt_id ? {
+          id: row.prompt_id,
+          name: row.prompt_name,
+          instructions: row.prompt_instructions,
+          voice: row.prompt_voice,
+        } : null,
+      },
+    };
+
+    // Include extra data if requested
+    if (include) {
+      const includes = include.split(',');
+      const sessionId = row.id;
+
+      const promises = [];
+
+      if (includes.includes('events')) {
+        promises.push(
+          query(
+            `SELECT id, event_type, direction, payload, created_at
+             FROM call_events
+             WHERE call_session_id = $1
+             ORDER BY created_at ASC`,
+            [sessionId]
+          ).then(r => ({ events: r.rows }))
+        );
+      }
+
+      if (includes.includes('transcripts')) {
+        promises.push(
+          query(
+            `SELECT id, speaker, content, timestamp_ms, created_at
+             FROM transcripts
+             WHERE call_session_id = $1
+             ORDER BY timestamp_ms ASC`,
+            [sessionId]
+          ).then(r => ({ transcripts: r.rows }))
+        );
+      }
+
+      if (includes.includes('recordings')) {
+        promises.push(
+          query(
+            `SELECT id, storage_path, duration_seconds, file_size_bytes, format, created_at
+             FROM recordings
+             WHERE call_session_id = $1`,
+            [sessionId]
+          ).then(r => ({ recordings: r.rows }))
+        );
+      }
+
+      const extraData = await Promise.all(promises);
+      extraData.forEach(data => Object.assign(response, data));
+    }
+
+    res.json(response);
+  } catch (error) {
+    logger.error('Failed to get call', { callSid: req.params.callSid, error });
+    res.status(500).json({
+      error: {
+        code: 'GET_CALL_FAILED',
+        message: 'Failed to retrieve call information',
+        details: error.message,
+      },
+    });
+  }
+});
+
+router.get('/:callSid/full', async (req, res) => {
+  try {
+    const { callSid } = req.params;
+
+    // Get call session with all related data
+    const sessionResult = await query(
+      `SELECT cs.id, cs.call_sid, cs.direction, cs.phone_number, cs.status,
+              cs.started_at, cs.ended_at, cs.duration_seconds, cs.config_snapshot,
+              cs.user_id, cs.prompt_id,
+              p.name as prompt_name, p.instructions as prompt_instructions, p.voice as prompt_voice
+       FROM call_sessions cs
+       LEFT JOIN prompts p ON cs.prompt_id = p.id
+       WHERE cs.call_sid = $1`,
+      [callSid]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'CALL_NOT_FOUND',
+          message: `Call not found: ${callSid}`,
+        },
+      });
+    }
+
+    const session = sessionResult.rows[0];
+
+    // Get events, transcripts, and recordings in parallel
+    const [eventsResult, transcriptsResult, recordingsResult] = await Promise.all([
+      query(
+        `SELECT id, event_type, direction, payload, created_at
+         FROM call_events
+         WHERE call_session_id = $1
+         ORDER BY created_at ASC`,
+        [session.id]
+      ),
+      query(
+        `SELECT id, speaker, content, timestamp_ms, created_at
+         FROM transcripts
+         WHERE call_session_id = $1
+         ORDER BY timestamp_ms ASC`,
+        [session.id]
+      ),
+      query(
+        `SELECT id, storage_path, duration_seconds, file_size_bytes, format, created_at
+         FROM recordings
+         WHERE call_session_id = $1`,
+        [session.id]
+      ),
+    ]);
+
+    res.json({
+      call: {
+        id: session.id,
+        call_sid: session.call_sid,
+        direction: session.direction,
+        phone_number: session.phone_number,
+        status: session.status,
+        started_at: session.started_at,
+        ended_at: session.ended_at,
+        duration_seconds: session.duration_seconds,
+        config: session.config_snapshot,
+        user_id: session.user_id,
+        prompt: session.prompt_id ? {
+          id: session.prompt_id,
+          name: session.prompt_name,
+          instructions: session.prompt_instructions,
+          voice: session.prompt_voice,
+        } : null,
+      },
+      events: eventsResult.rows,
+      transcripts: transcriptsResult.rows,
+      recordings: recordingsResult.rows.map(r => ({
+        id: r.id,
+        duration_seconds: r.duration_seconds,
+        file_size_bytes: r.file_size_bytes,
+        format: r.format,
+        created_at: r.created_at,
+      })),
+      statistics: {
+        event_count: eventsResult.rows.length,
+        transcript_count: transcriptsResult.rows.length,
+        recording_count: recordingsResult.rows.length,
+        user_message_count: transcriptsResult.rows.filter(t => t.speaker === 'user').length,
+        assistant_message_count: transcriptsResult.rows.filter(t => t.speaker === 'assistant').length,
       },
     });
   } catch (error) {
-    logger.error('Failed to get call', { callSid: req.params.callSid, error });
+    logger.error('Failed to get full call details', { callSid: req.params.callSid, error });
     res.status(500).json({
       error: {
         code: 'GET_CALL_FAILED',

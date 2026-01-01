@@ -2,6 +2,8 @@ import { Router } from 'express';
 import twilio from 'twilio';
 import config from '../config/environment.js';
 import { createLogger } from '../utils/logger.js';
+import { query } from '../db/pool.js';
+import connectionManager from '../websocket/connectionManager.js';
 
 const router = Router();
 const logger = createLogger('routes:twiml');
@@ -90,7 +92,7 @@ router.post('/incoming', (req, res) => {
   logger.debug('Incoming TwiML generated', { callSid: CallSid });
 });
 
-router.post('/status', (req, res) => {
+router.post('/status', async (req, res) => {
   const {
     CallSid,
     CallStatus,
@@ -98,6 +100,10 @@ router.post('/status', (req, res) => {
     From,
     To,
     Direction,
+    Timestamp,
+    SipResponseCode,
+    ErrorCode,
+    ErrorMessage,
   } = req.body;
 
   logger.info('Call status callback', {
@@ -108,6 +114,89 @@ router.post('/status', (req, res) => {
     to: To,
     direction: Direction,
   });
+
+  // Map Twilio status to our internal status
+  const statusMapping = {
+    'initiated': 'initializing',
+    'queued': 'queued',
+    'ringing': 'ringing',
+    'in-progress': 'active',
+    'completed': 'completed',
+    'busy': 'failed',
+    'no-answer': 'failed',
+    'canceled': 'failed',
+    'failed': 'failed',
+  };
+
+  const internalStatus = statusMapping[CallStatus] || CallStatus;
+
+  try {
+    // Update call session in database
+    const updates = { status: internalStatus };
+
+    if (CallStatus === 'completed' || CallStatus === 'failed' || CallStatus === 'busy' || CallStatus === 'no-answer' || CallStatus === 'canceled') {
+      updates.ended_at = new Date();
+      if (CallDuration) {
+        updates.duration_seconds = parseInt(CallDuration, 10);
+      }
+    }
+
+    const updateParts = [];
+    const params = [];
+    let paramIndex = 1;
+
+    for (const [key, value] of Object.entries(updates)) {
+      updateParts.push(`${key} = $${paramIndex++}`);
+      params.push(value);
+    }
+
+    params.push(CallSid);
+
+    const result = await query(
+      `UPDATE call_sessions SET ${updateParts.join(', ')}
+       WHERE call_sid = $${paramIndex}
+       RETURNING id, status`,
+      params
+    );
+
+    if (result.rows.length > 0) {
+      logger.debug('Call session updated from status callback', {
+        callSid: CallSid,
+        status: internalStatus,
+        sessionId: result.rows[0].id,
+      });
+
+      // Log the status event
+      await query(
+        `INSERT INTO call_events (call_session_id, event_type, direction, payload)
+         VALUES ($1, $2, 'incoming', $3)`,
+        [
+          result.rows[0].id,
+          `status:${CallStatus}`,
+          {
+            callStatus: CallStatus,
+            callDuration: CallDuration,
+            sipResponseCode: SipResponseCode,
+            errorCode: ErrorCode,
+            errorMessage: ErrorMessage,
+            timestamp: Timestamp,
+          },
+        ]
+      );
+    }
+
+    // If call ended, cleanup connection manager session
+    if (CallStatus === 'completed' || CallStatus === 'failed' || CallStatus === 'busy' || CallStatus === 'no-answer' || CallStatus === 'canceled') {
+      connectionManager.destroySession(CallSid, `twilio_status:${CallStatus}`);
+    }
+
+  } catch (error) {
+    logger.error('Failed to update call status in database', {
+      callSid: CallSid,
+      status: CallStatus,
+      error: error.message,
+    });
+  }
 
   res.status(200).send('OK');
 });
