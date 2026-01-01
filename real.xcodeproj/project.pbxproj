@@ -29,22 +29,9 @@
 		2F08F1942F0620AF006B6313 /* realUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = realUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2F08F19C2F0620AF006B6313 /* Exceptions for "real" folder in "real" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 2F08F1782F0620AD006B6313 /* real */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2F08F17B2F0620AD006B6313 /* real */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				2F08F19C2F0620AF006B6313 /* Exceptions for "real" folder in "real" target */,
-			);
 			path = real;
 			sourceTree = "<group>";
 		};

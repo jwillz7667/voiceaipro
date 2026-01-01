@@ -11,6 +11,16 @@ const VoiceGrant = AccessToken.VoiceGrant;
 
 router.post('/', (req, res) => {
   try {
+    // Check if required Twilio SDK credentials are configured
+    if (!config.twilio.apiKey || !config.twilio.apiSecret || !config.twilio.twimlAppSid) {
+      return res.status(503).json({
+        error: {
+          code: 'SDK_NOT_CONFIGURED',
+          message: 'Twilio SDK token generation requires TWILIO_API_KEY, TWILIO_API_SECRET, and TWIML_APP_SID',
+        },
+      });
+    }
+
     const { identity, device_id } = req.body;
 
     if (!identity && !device_id) {
@@ -67,6 +77,16 @@ router.post('/', (req, res) => {
 
 router.post('/refresh', (req, res) => {
   try {
+    // Check if required Twilio SDK credentials are configured
+    if (!config.twilio.apiKey || !config.twilio.apiSecret || !config.twilio.twimlAppSid) {
+      return res.status(503).json({
+        error: {
+          code: 'SDK_NOT_CONFIGURED',
+          message: 'Twilio SDK token generation requires TWILIO_API_KEY, TWILIO_API_SECRET, and TWIML_APP_SID',
+        },
+      });
+    }
+
     const { identity } = req.body;
 
     if (!identity) {

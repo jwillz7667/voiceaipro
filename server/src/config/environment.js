@@ -38,9 +38,9 @@ const config = {
   twilio: {
     accountSid: requireEnv('TWILIO_ACCOUNT_SID'),
     authToken: requireEnv('TWILIO_AUTH_TOKEN'),
-    apiKey: requireEnv('TWILIO_API_KEY'),
-    apiSecret: requireEnv('TWILIO_API_SECRET'),
-    twimlAppSid: requireEnv('TWIML_APP_SID'),
+    apiKey: process.env.TWILIO_API_KEY || null,           // Optional: needed for iOS SDK tokens
+    apiSecret: process.env.TWILIO_API_SECRET || null,     // Optional: needed for iOS SDK tokens
+    twimlAppSid: process.env.TWIML_APP_SID || null,       // Optional: needed for iOS SDK tokens
     phoneNumber: requireEnv('TWILIO_PHONE_NUMBER'),
   },
 
@@ -93,9 +93,6 @@ export function validateEnvironment() {
   const requiredVars = [
     'TWILIO_ACCOUNT_SID',
     'TWILIO_AUTH_TOKEN',
-    'TWILIO_API_KEY',
-    'TWILIO_API_SECRET',
-    'TWIML_APP_SID',
     'TWILIO_PHONE_NUMBER',
     'OPENAI_API_KEY',
     'DATABASE_URL',
@@ -114,11 +111,13 @@ export function validateEnvironment() {
     throw new EnvironmentError('TWILIO_ACCOUNT_SID must start with "AC"');
   }
 
-  if (!config.twilio.apiKey.startsWith('SK')) {
+  // Optional: validate API key format if provided
+  if (config.twilio.apiKey && !config.twilio.apiKey.startsWith('SK')) {
     throw new EnvironmentError('TWILIO_API_KEY must start with "SK"');
   }
 
-  if (!config.twilio.twimlAppSid.startsWith('AP')) {
+  // Optional: validate TwiML app SID if provided
+  if (config.twilio.twimlAppSid && !config.twilio.twimlAppSid.startsWith('AP')) {
     throw new EnvironmentError('TWIML_APP_SID must start with "AP"');
   }
 
