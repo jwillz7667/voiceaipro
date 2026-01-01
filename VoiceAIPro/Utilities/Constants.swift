@@ -13,11 +13,8 @@ enum Constants {
 
     enum API {
         /// Whether to use local development server
-        #if DEBUG
-        static let useLocalServer = true
-        #else
+        /// Set to false to use production server even in DEBUG builds
         static let useLocalServer = false
-        #endif
 
         /// Production server URL (Railway deployment)
         static let productionURL = "https://voiceaipro-production.up.railway.app"

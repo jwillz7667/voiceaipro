@@ -71,11 +71,7 @@ router.post('/incoming', (req, res) => {
 
   const response = new VoiceResponse();
 
-  response.say(
-    { voice: 'Polly.Amy' },
-    'Please hold while we connect you to our AI assistant.'
-  );
-
+  // Connect directly to AI without greeting message
   const connect = response.connect();
   const stream = connect.stream({
     url: `wss://${req.headers.host}/media-stream`,

@@ -379,10 +379,13 @@ function buildSessionConfig(cfg) {
  * Default system instructions if none provided
  */
 function getDefaultInstructions() {
+  // CUSTOMIZE YOUR AI INSTRUCTIONS HERE
   return `You are a helpful AI assistant conducting a phone conversation.
 Be natural, conversational, and helpful. Keep responses concise as this is a voice call.
 Listen carefully and ask clarifying questions when needed.
-Respond in a friendly, professional manner.`;
+Respond in a friendly, professional manner.
+
+Start the conversation by greeting the caller and asking how you can help them today.`;
 }
 
 /**
