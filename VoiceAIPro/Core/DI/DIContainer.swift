@@ -28,6 +28,9 @@ class DIContainer: ObservableObject {
     /// Audio session manager
     var audioSessionManager: AudioSessionManager { AudioSessionManager.shared }
 
+    /// WebSocket service
+    @Published private(set) var webSocketService: WebSocketService!
+
     /// Call manager (high-level orchestrator)
     @Published private(set) var callManager: CallManager!
 
@@ -73,11 +76,18 @@ class DIContainer: ObservableObject {
         // Link Twilio service to CallKit manager
         twilioService.setCallKitManager(callKitManager)
 
+        // Create WebSocket service
+        webSocketService = WebSocketService(
+            baseURL: Constants.API.wsURL,
+            deviceId: deviceId
+        )
+
         // Create Call manager (orchestrator)
         callManager = CallManager(
             twilioService: twilioService,
             callKitManager: callKitManager,
             apiClient: apiClient,
+            webSocketService: webSocketService,
             appState: appState
         )
     }

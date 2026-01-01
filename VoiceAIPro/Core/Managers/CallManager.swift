@@ -38,12 +38,28 @@ class CallManager: ObservableObject {
     /// Last error
     @Published private(set) var lastError: Error?
 
+    /// Event processor for real-time events
+    @Published private(set) var eventProcessor = EventProcessor()
+
+    /// WebSocket connection state
+    @Published private(set) var webSocketState: WebSocketService.ConnectionState = .disconnected
+
+    /// Whether AI is speaking
+    var isAISpeaking: Bool { eventProcessor.isAISpeaking }
+
+    /// Whether user is speaking
+    var isUserSpeaking: Bool { eventProcessor.isUserSpeaking }
+
+    /// Current transcript
+    var currentTranscript: String { eventProcessor.currentTranscript }
+
     // MARK: - Services
 
     private let twilioService: TwilioVoiceService
     private let callKitManager: CallKitManager
     private let audioSessionManager: AudioSessionManager
     private let apiClient: APIClientProtocol
+    private let webSocketService: WebSocketService
     private weak var appState: AppState?
 
     // MARK: - Private Properties
@@ -64,16 +80,19 @@ class CallManager: ObservableObject {
         callKitManager: CallKitManager,
         audioSessionManager: AudioSessionManager = .shared,
         apiClient: APIClientProtocol,
+        webSocketService: WebSocketService,
         appState: AppState
     ) {
         self.twilioService = twilioService
         self.callKitManager = callKitManager
         self.audioSessionManager = audioSessionManager
         self.apiClient = apiClient
+        self.webSocketService = webSocketService
         self.appState = appState
 
         setupCallbacks()
         setupBindings()
+        setupWebSocketHandlers()
     }
 
     // MARK: - Setup
@@ -171,6 +190,38 @@ class CallManager: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        // Bind WebSocket connection state
+        webSocketService.$connectionState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in
+                self?.webSocketState = state
+            }
+            .store(in: &cancellables)
+    }
+
+    private func setupWebSocketHandlers() {
+        // Handle call status updates
+        webSocketService.onCallStatus = { [weak self] status in
+            Task { @MainActor in
+                self?.handleCallStatusUpdate(status)
+            }
+        }
+
+        // Handle real-time events
+        webSocketService.onEvent = { [weak self] event in
+            Task { @MainActor in
+                self?.eventProcessor.processEvent(event)
+                self?.appState?.addEvent(event)
+            }
+        }
+
+        // Handle errors
+        webSocketService.onError = { [weak self] error in
+            Task { @MainActor in
+                self?.lastError = error
+            }
+        }
     }
 
     // MARK: - Initialization
@@ -180,7 +231,12 @@ class CallManager: ObservableObject {
         callState = .initializing
 
         do {
+            // Initialize Twilio
             try await twilioService.initialize()
+
+            // Connect WebSocket control channel
+            try await webSocketService.connect()
+
             callState = .idle
         } catch {
             callState = .error(error)
@@ -244,6 +300,17 @@ class CallManager: ObservableObject {
             hasActiveCall = true
             appState?.setActiveCall(session)
 
+            // Start event processor
+            eventProcessor.startCall(callId: call.sid ?? session.id.uuidString)
+
+            // Connect event stream for real-time updates
+            if let callSid = call.sid {
+                try? await webSocketService.connectEventStream(callId: callSid)
+            }
+
+            // Send session config via WebSocket
+            try? await webSocketService.sendSessionConfig(config)
+
         } catch {
             callState = .error(error)
             currentSession = nil
@@ -265,6 +332,37 @@ class CallManager: ObservableObject {
         if let callSid = currentSession?.callSid {
             try? await apiClient.endCall(callSid: callSid)
         }
+
+        // Disconnect event stream
+        webSocketService.disconnectEventStream()
+
+        // End event processing
+        eventProcessor.endCall()
+    }
+
+    // MARK: - WebSocket Actions
+
+    /// Update session configuration mid-call
+    func updateConfig(_ config: RealtimeConfig) async throws {
+        guard hasActiveCall else { return }
+        try await webSocketService.sendCallAction(.updateConfig(config))
+    }
+
+    /// Cancel current AI response
+    func cancelAIResponse() async throws {
+        guard hasActiveCall else { return }
+        try await webSocketService.sendCallAction(.cancelResponse)
+    }
+
+    /// Interrupt AI (same as cancel)
+    func interruptAI() async throws {
+        try await cancelAIResponse()
+    }
+
+    /// Clear audio buffer
+    func clearAudioBuffer() async throws {
+        guard hasActiveCall else { return }
+        try await webSocketService.sendCallAction(.clearAudioBuffer)
     }
 
     // MARK: - Inbound Calls
@@ -364,6 +462,10 @@ class CallManager: ObservableObject {
             appState?.endCall()
         }
 
+        // Cleanup WebSocket
+        webSocketService.disconnectEventStream()
+        eventProcessor.endCall()
+
         // Reset state
         hasActiveCall = false
         currentSession = nil
@@ -397,6 +499,36 @@ class CallManager: ObservableObject {
         }
         if warnings.contains(.lowMos) {
             print("[CallManager] Quality warning: Low MOS")
+        }
+    }
+
+    private func handleCallStatusUpdate(_ status: CallStatusMessage) {
+        // Update session status from server
+        guard var session = currentSession,
+              session.callSid == status.callSid else { return }
+
+        if let newStatus = status.callStatus {
+            session.status = newStatus
+            currentSession = session
+
+            switch newStatus {
+            case .inProgress:
+                callState = .connected
+            case .ended, .completed:
+                callState = .idle
+                handleCallDisconnected(nil, error: nil)
+            case .failed:
+                let error = CallManagerError.connectionFailed("Call failed on server")
+                handleCallDisconnected(nil, error: error)
+            default:
+                break
+            }
+        }
+
+        // Update duration if provided
+        if let duration = status.duration {
+            session.durationSeconds = duration
+            currentSession = session
         }
     }
 
