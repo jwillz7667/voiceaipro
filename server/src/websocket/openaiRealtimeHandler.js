@@ -315,10 +315,10 @@ function sendSessionConfig(session) {
 function buildSessionConfig(cfg) {
   // GA gpt-realtime API uses simplified session config
   // See: https://platform.openai.com/docs/guides/realtime
+  // Note: voice is set via model selection (gpt-realtime), not session.update
   const sessionConfig = {
     type: 'realtime',  // Required: 'realtime' or 'transcription'
     instructions: cfg.instructions || getDefaultInstructions(),
-    voice: cfg.voice || 'marin',  // 'marin' or 'cedar' for best quality
   };
 
   // Turn detection (VAD) - simplified for GA API
