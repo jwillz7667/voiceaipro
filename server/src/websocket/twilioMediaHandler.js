@@ -26,7 +26,7 @@ import connectionManager from './connectionManager.js';
 import { mulawBase64ToPCM16Base64, AudioChunkBuffer } from '../audio/converter.js';
 import { connectToOpenAI } from './openaiRealtimeHandler.js';
 import { logEvent, logTranscript } from '../services/eventLogger.js';
-import { processCallRecording } from '../services/recordingService.js';
+import { startRecording, appendUserAudio, stopRecording } from '../services/recordingService.js';
 import { query } from '../db/pool.js';
 
 const logger = createLogger('twilio-media');
@@ -304,6 +304,20 @@ export function handleTwilioMediaStream(ws, request) {
       logger.error('Failed to log call start', { callSid, error: error.message });
     }
 
+    // Start recording if enabled
+    if (session.isRecording) {
+      try {
+        await startRecording(callSid, {
+          userId: session.userId,
+          promptId: session.promptId,
+        });
+        logger.info('Recording started for call', { callSid });
+      } catch (error) {
+        logger.error('Failed to start recording', { callSid, error: error.message });
+        // Don't fail the call if recording fails
+      }
+    }
+
     // Connect to OpenAI Realtime API
     try {
       await connectToOpenAI(session);
@@ -378,14 +392,9 @@ export function handleTwilioMediaStream(ws, request) {
         sendBufferedAudioToOpenAI(session, bufferedSamples);
       }
 
-      // Store for recording if enabled
+      // Send to recording service (PCM16 at 24kHz)
       if (session.isRecording) {
-        session.addRecordingChunk({
-          type: track || 'inbound',
-          audio: mulawBase64,
-          timestamp: timestamp,
-          sequence: audioSequence,
-        });
+        appendUserAudio(callSid, samples);
       }
 
       // Log progress periodically
@@ -468,12 +477,20 @@ export function handleTwilioMediaStream(ws, request) {
     // Finalize recording if enabled
     if (session.isRecording) {
       try {
-        const recording = await processCallRecording(session);
+        const recording = await stopRecording(callSid);
         if (recording) {
           logger.info('Recording saved', {
             callSid,
-            recordingId: recording.id,
-            durationSeconds: recording.duration_seconds,
+            recordingId: recording.recordingId,
+            durationSeconds: recording.durationSeconds,
+            fileSizeBytes: recording.fileSizeBytes,
+          });
+
+          // Broadcast recording saved event to iOS
+          session.broadcastEvent('recording.saved', {
+            recordingId: recording.recordingId,
+            durationSeconds: recording.durationSeconds,
+            fileSizeBytes: recording.fileSizeBytes,
           });
         }
       } catch (error) {

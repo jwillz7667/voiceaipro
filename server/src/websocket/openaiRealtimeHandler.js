@@ -31,6 +31,7 @@ import { createLogger } from '../utils/logger.js';
 import { pcm16Base64ToMulawBase64 } from '../audio/converter.js';
 import { sendAudioToTwilio, sendMarkToTwilio, clearTwilioBuffer } from './twilioMediaHandler.js';
 import { logEvent } from '../services/eventLogger.js';
+import { appendAIAudio } from '../services/recordingService.js';
 
 const logger = createLogger('openai-realtime');
 
@@ -653,14 +654,16 @@ function handleAudioDelta(session, message, state) {
     // Send to Twilio
     sendAudioToTwilio(session, mulawBase64);
 
-    // Store for recording if enabled
+    // Send AI audio to recording service (PCM16 at 24kHz)
     if (session.isRecording) {
-      session.addRecordingChunk({
-        type: 'outbound',
-        audio: mulawBase64,
-        timestamp: Date.now(),
-        responseId: state.currentResponseId,
-      });
+      // Decode base64 to get PCM16 samples
+      const pcm16Buffer = Buffer.from(audioBase64, 'base64');
+      const samples = new Int16Array(
+        pcm16Buffer.buffer,
+        pcm16Buffer.byteOffset,
+        pcm16Buffer.length / 2
+      );
+      appendAIAudio(session.callSid, samples);
     }
 
     // Log progress periodically

@@ -1,10 +1,31 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
 import { query, transaction } from '../db/pool.js';
+import connectionManager from '../websocket/connectionManager.js';
 
 const logger = createLogger('event-logger');
 
-export async function logEvent(callSessionId, eventType, direction, payload = null) {
+/**
+ * Event Logger with iOS Broadcasting
+ *
+ * Logs events to the database and broadcasts to connected iOS clients
+ * for real-time event viewing in the mobile app.
+ */
+
+/**
+ * Log an event to the database and broadcast to iOS clients
+ * @param {string} callSessionId - The database session ID (UUID)
+ * @param {string} eventType - Type of event (e.g., 'call.started', 'transcript.user')
+ * @param {string} direction - 'incoming' or 'outgoing'
+ * @param {object|null} payload - Event data payload
+ * @param {object} options - Additional options
+ * @param {string} options.callSid - Twilio call SID for broadcasting
+ * @param {boolean} options.skipBroadcast - Skip iOS broadcast (default: false)
+ * @returns {Promise<object>} - The created event record
+ */
+export async function logEvent(callSessionId, eventType, direction, payload = null, options = {}) {
+  const { callSid, skipBroadcast = false } = options;
+
   try {
     const result = await query(
       `INSERT INTO call_events (id, call_session_id, event_type, direction, payload)
@@ -13,7 +34,20 @@ export async function logEvent(callSessionId, eventType, direction, payload = nu
       [uuidv4(), callSessionId, eventType, direction, payload ? JSON.stringify(payload) : null]
     );
 
-    return result.rows[0];
+    const event = result.rows[0];
+
+    // Broadcast to iOS clients for real-time viewing
+    if (!skipBroadcast && callSid) {
+      broadcastEventToIOS(callSid, eventType, event, payload);
+    } else if (!skipBroadcast && callSessionId) {
+      // Try to find callSid from session
+      const sessionCallSid = findCallSidBySessionId(callSessionId);
+      if (sessionCallSid) {
+        broadcastEventToIOS(sessionCallSid, eventType, event, payload);
+      }
+    }
+
+    return event;
   } catch (error) {
     logger.error('Failed to log event', {
       callSessionId,
@@ -21,6 +55,40 @@ export async function logEvent(callSessionId, eventType, direction, payload = nu
       error: error.message,
     });
     throw error;
+  }
+}
+
+/**
+ * Find callSid from session ID by checking active sessions
+ */
+function findCallSidBySessionId(sessionId) {
+  const sessions = connectionManager.getAllSessions();
+  for (const session of sessions) {
+    if (session.id === sessionId) {
+      return session.callSid;
+    }
+  }
+  return null;
+}
+
+/**
+ * Broadcast event to connected iOS clients
+ */
+function broadcastEventToIOS(callSid, eventType, event, payload) {
+  try {
+    connectionManager.broadcastEvent(callSid, `event.${eventType}`, {
+      eventId: event.id,
+      eventType: event.event_type,
+      direction: event.direction,
+      payload: payload,
+      timestamp: event.created_at,
+    });
+  } catch (error) {
+    logger.debug('Failed to broadcast event to iOS', {
+      callSid,
+      eventType,
+      error: error.message,
+    });
   }
 }
 
@@ -163,7 +231,19 @@ export async function deleteEvents(callSessionId) {
   return result.rowCount;
 }
 
-export async function logTranscript(callSessionId, speaker, content, timestampMs = null) {
+/**
+ * Log a transcript to the database and broadcast to iOS clients
+ * @param {string} callSessionId - The database session ID (UUID)
+ * @param {string} speaker - 'user' or 'assistant'
+ * @param {string} content - The transcript text
+ * @param {number|null} timestampMs - Timestamp in milliseconds from call start
+ * @param {object} options - Additional options
+ * @param {string} options.callSid - Twilio call SID for broadcasting
+ * @returns {Promise<object>} - The created transcript record
+ */
+export async function logTranscript(callSessionId, speaker, content, timestampMs = null, options = {}) {
+  const { callSid } = options;
+
   try {
     const result = await query(
       `INSERT INTO transcripts (id, call_session_id, speaker, content, timestamp_ms)
@@ -172,7 +252,25 @@ export async function logTranscript(callSessionId, speaker, content, timestampMs
       [uuidv4(), callSessionId, speaker, content, timestampMs]
     );
 
-    return result.rows[0];
+    const transcript = result.rows[0];
+
+    // Broadcast to iOS clients for real-time viewing
+    const resolvedCallSid = callSid || findCallSidBySessionId(callSessionId);
+    if (resolvedCallSid) {
+      try {
+        connectionManager.broadcastEvent(resolvedCallSid, `transcript.${speaker}`, {
+          transcriptId: transcript.id,
+          speaker: transcript.speaker,
+          content: transcript.content,
+          timestampMs: transcript.timestamp_ms,
+          createdAt: transcript.created_at,
+        });
+      } catch (err) {
+        logger.debug('Failed to broadcast transcript', { error: err.message });
+      }
+    }
+
+    return transcript;
   } catch (error) {
     logger.error('Failed to log transcript', {
       callSessionId,
