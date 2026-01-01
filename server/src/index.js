@@ -74,6 +74,10 @@ app.get('/health', async (req, res) => {
   const poolStats = getPoolStats();
   const activeConnections = connectionManager.getStats();
 
+  // Check Twilio SDK configuration
+  const twilioSdkConfigured = !!(config.twilio.apiKey && config.twilio.apiSecret && config.twilio.twimlAppSid);
+  const twilioWebhooksConfigured = !!(config.twilio.accountSid && config.twilio.authToken);
+
   const status = dbConnected ? 'healthy' : 'degraded';
 
   res.status(dbConnected ? 200 : 503).json({
@@ -84,6 +88,10 @@ app.get('/health', async (req, res) => {
     database: {
       connected: dbConnected,
       pool: poolStats,
+    },
+    twilio: {
+      sdkTokens: twilioSdkConfigured,
+      webhooks: twilioWebhooksConfigured,
     },
     connections: {
       activeSessions: activeConnections.activeSessions,
@@ -296,6 +304,16 @@ async function startServer() {
         environment: config.nodeEnv,
         pid: process.pid,
       });
+
+      // Check Twilio SDK configuration
+      const hasTwilioSdk = config.twilio.apiKey && config.twilio.apiSecret && config.twilio.twimlAppSid;
+      if (!hasTwilioSdk) {
+        appLogger.warn('Twilio SDK not fully configured - iOS client tokens disabled');
+        appLogger.warn('Missing: TWILIO_API_KEY, TWILIO_API_SECRET, and/or TWIML_APP_SID');
+        appLogger.warn('Inbound calls via webhooks will still work with Account SID/Auth Token');
+      } else {
+        appLogger.info('Twilio SDK configured - iOS client tokens enabled');
+      }
 
       appLogger.info('WebSocket endpoints available', {
         mediaStream: `/media-stream`,
