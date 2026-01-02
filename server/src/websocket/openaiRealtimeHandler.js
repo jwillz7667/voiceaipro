@@ -105,6 +105,37 @@ class OpenAISessionState {
 }
 
 /**
+ * Build the OpenAI Realtime WebSocket URL with session config
+ * Voice, audio format, and turn detection are passed as URL parameters
+ */
+function buildOpenAIUrl(sessionConfig) {
+  const baseUrl = config.openai.realtimeBaseUrl;
+  const params = new URLSearchParams();
+
+  // Model
+  params.set('model', sessionConfig.model || config.openai.defaultModel);
+
+  // Voice - use session config or default
+  params.set('voice', sessionConfig.voice || config.openai.defaultVoice);
+
+  // Audio formats for Twilio (μ-law 8kHz)
+  params.set('input_audio_format', 'g711_ulaw');
+  params.set('output_audio_format', 'g711_ulaw');
+
+  // Turn detection (VAD)
+  const vadType = sessionConfig.vadType || config.openai.defaultVadType;
+  if (vadType === 'disabled' || vadType === 'none') {
+    // No turn detection - manual mode
+    params.set('turn_detection', 'none');
+  } else {
+    // semantic_vad or server_vad
+    params.set('turn_detection', vadType);
+  }
+
+  return `${baseUrl}?${params.toString()}`;
+}
+
+/**
  * Connect to OpenAI Realtime API
  * Establishes WebSocket connection, authenticates, and configures session
  *
@@ -113,12 +144,15 @@ class OpenAISessionState {
  */
 export async function connectToOpenAI(session) {
   return new Promise((resolve, reject) => {
-    const url = config.openai.realtimeUrl;
+    // Build URL with session-specific config (voice, VAD, etc.)
+    const url = buildOpenAIUrl(session.config);
 
     logger.info('Connecting to OpenAI Realtime API', {
       callSid: session.callSid,
       url,
-      model: config.openai.defaultModel,
+      voice: session.config.voice,
+      vadType: session.config.vadType,
+      model: session.config.model,
     });
 
     // Initialize session state

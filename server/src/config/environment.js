@@ -46,10 +46,11 @@ const config = {
 
   openai: {
     apiKey: requireEnv('OPENAI_API_KEY'),
-    // GA gpt-realtime with voice, audio format, and turn detection in URL
-    realtimeUrl: 'wss://api.openai.com/v1/realtime?model=gpt-realtime&voice=marin&input_audio_format=g711_ulaw&output_audio_format=g711_ulaw&turn_detection=semantic_vad',
+    // Base URL - voice and turn_detection will be added dynamically per session
+    realtimeBaseUrl: 'wss://api.openai.com/v1/realtime',
     defaultModel: 'gpt-realtime',
     defaultVoice: 'marin',
+    defaultVadType: 'semantic_vad',
   },
 
   database: {
