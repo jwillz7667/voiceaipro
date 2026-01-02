@@ -1,32 +1,33 @@
 import Foundation
 import SwiftData
+import SwiftUI
 
 /// SwiftData model for storing favorite contacts for quick dialing
 @Model
-final class FavoriteContact {
+final class FavoriteContact: @unchecked Sendable {
     /// Unique identifier
-    var id: UUID
+    @Attribute(.unique) var id: UUID = UUID()
 
     /// Contact name
-    var name: String
+    var name: String = ""
 
     /// Phone number (stored as digits only)
-    var phoneNumber: String
+    var phoneNumber: String = ""
 
     /// Optional color identifier for visual distinction
-    var colorName: String
+    var colorName: String = "blue"
 
     /// Order in the favorites list
-    var sortOrder: Int
+    var sortOrder: Int = 0
 
     /// When this favorite was created
-    var createdAt: Date
+    var createdAt: Date = Date()
 
     /// When this favorite was last called
     var lastCalledAt: Date?
 
     /// Total number of calls made to this contact
-    var callCount: Int
+    var callCount: Int = 0
 
     init(
         name: String,
@@ -129,8 +130,6 @@ extension FavoriteContact {
         ]
     }
 }
-
-import SwiftUI
 
 /// View for adding/editing a favorite contact
 struct EditFavoriteSheet: View {

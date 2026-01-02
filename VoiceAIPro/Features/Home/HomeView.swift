@@ -83,7 +83,7 @@ struct HomeView: View {
                 // Clear phone number after successful call initiation
                 phoneNumber = ""
             } catch {
-                appState.showAlert(.error, message: "Failed to start call: \(error.localizedDescription)")
+                appState.showError("Failed to start call: \(error.localizedDescription)")
             }
         }
     }
@@ -139,9 +139,9 @@ struct EventLogRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             // Event type icon
-            Image(systemName: event.eventType.iconName)
+            Image(systemName: event.eventType.icon)
                 .font(.system(size: 14))
-                .foregroundColor(event.eventType.color)
+                .foregroundColor(eventColor)
                 .frame(width: 24)
 
             VStack(alignment: .leading, spacing: 4) {

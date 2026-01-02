@@ -316,13 +316,13 @@ function sendSessionConfig(session) {
  * See: https://platform.openai.com/docs/api-reference/realtime
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime schema
+  // GA gpt-realtime session.update schema
+  // Note: voice and audio formats are set via WebSocket URL params
   const sessionConfig = {
-    type: 'realtime',
+    instructions: cfg.instructions || getDefaultInstructions(),
     input_audio_transcription: {
       model: cfg.transcriptionModel || 'gpt-4o-transcribe',
     },
-    instructions: cfg.instructions || getDefaultInstructions(),
   };
 
   // Configure turn detection (VAD)
@@ -547,13 +547,21 @@ function handleSessionCreated(session, message, state) {
 }
 
 function handleSessionUpdated(session, message, state) {
+  const appliedSession = message.session || {};
+
   logger.info('OpenAI session updated', {
     callSid: session.callSid,
     sessionId: state.sessionId,
+    voice: appliedSession.voice,
+    inputFormat: appliedSession.input_audio_format,
+    outputFormat: appliedSession.output_audio_format,
+    turnDetection: appliedSession.turn_detection?.type,
+    instructionsLength: appliedSession.instructions?.length,
+    fullSession: JSON.stringify(appliedSession),
   });
 
   session.broadcastEvent('session.updated', {
-    session: message.session,
+    session: appliedSession,
   });
 }
 
