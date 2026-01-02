@@ -412,42 +412,58 @@ function sendError(ws, code, message) {
 }
 
 export function handleEventStreamConnection(ws, request, callSid) {
-  logger.info('New event stream connection', { callSid });
+  logger.info('🟢 [EVENT-STREAM] ========== NEW CONNECTION ==========', { callSid });
 
   const session = connectionManager.getSession(callSid);
+  logger.info('🟢 [EVENT-STREAM] Session lookup result', {
+    callSid,
+    sessionFound: !!session,
+    sessionId: session?.id,
+  });
 
   if (session) {
+    logger.info('🟢 [EVENT-STREAM] Session exists, adding subscriber');
+
     sendMessage(ws, 'connected', {
       call_sid: callSid,
       session: session.toJSON(),
     });
+    logger.info('🟢 [EVENT-STREAM] Sent connected message');
 
     // Send recent events to catch up
     const recentEvents = session.events.slice(-50);
+    logger.info('🟢 [EVENT-STREAM] Sending recent events', { count: recentEvents.length });
     recentEvents.forEach((event) => {
       sendMessage(ws, 'event', event);
     });
 
     // Subscribe directly to session for real-time events
     session.addEventSubscriber(ws);
+    logger.info('🟢 [EVENT-STREAM] ✅ Subscriber added to session', {
+      subscriberCount: session.eventSubscribers.size,
+    });
 
     ws.on('close', () => {
-      logger.info('Event stream connection closed', { callSid });
+      logger.info('🟢 [EVENT-STREAM] Connection closed', { callSid });
       session.removeEventSubscriber(ws);
       connectionManager.unsubscribeFromEvents(callSid, ws);
     });
   } else {
+    logger.info('🟢 [EVENT-STREAM] ⚠️ No session yet, registering for future events');
     // No active session, still register for future events
     connectionManager.subscribeToEvents(callSid, ws);
+    logger.info('🟢 [EVENT-STREAM] Registered with connectionManager', {
+      pendingCount: connectionManager.eventSubscribers.get(callSid)?.size || 0,
+    });
 
     ws.on('close', () => {
-      logger.info('Event stream connection closed', { callSid });
+      logger.info('🟢 [EVENT-STREAM] Connection closed (no session)', { callSid });
       connectionManager.unsubscribeFromEvents(callSid, ws);
     });
   }
 
   ws.on('error', (error) => {
-    logger.error('Event stream error', { callSid, error: error.message });
+    logger.error('🟢 [EVENT-STREAM] ❌ Error', { callSid, error: error.message });
   });
 }
 

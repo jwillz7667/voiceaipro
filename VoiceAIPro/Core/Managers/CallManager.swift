@@ -288,7 +288,14 @@ class CallManager: ObservableObject {
         config: RealtimeConfig = .default,
         promptId: UUID? = nil
     ) async throws {
+        print("🔴 [CallManager] ========== START CALL ==========")
+        print("🔴 [CallManager] Phone: \(phoneNumber)")
+        print("🔴 [CallManager] Config voice: \(config.voice.rawValue)")
+        print("🔴 [CallManager] Config instructions length: \(config.instructions.count)")
+        print("🔴 [CallManager] Prompt ID: \(promptId?.uuidString ?? "none")")
+
         guard !hasActiveCall else {
+            print("🔴 [CallManager] ERROR: Call already active!")
             throw CallManagerError.callAlreadyActive
         }
 
@@ -301,16 +308,21 @@ class CallManager: ObservableObject {
             promptId: promptId
         )
         currentSession = session
+        print("🔴 [CallManager] Session created: \(session.id)")
 
         do {
             // Configure audio session
             try audioSessionManager.configureForVoIP()
+            print("🔴 [CallManager] Audio configured")
 
             // Initiate call via API first (if needed for server-side setup)
             // This notifies the server to prepare the bridge
+            print("🔴 [CallManager] Calling API initiateCall...")
             _ = try await apiClient.initiateCall(to: phoneNumber, config: config)
+            print("🔴 [CallManager] API initiateCall completed")
 
             // Make the call via Twilio
+            print("🔴 [CallManager] Making Twilio call...")
             let call = try await twilioService.makeCall(
                 to: phoneNumber,
                 params: [
@@ -318,6 +330,7 @@ class CallManager: ObservableObject {
                     "Config": config.toJSON() ?? ""
                 ]
             )
+            print("🔴 [CallManager] Twilio call made, SID: \(call.sid ?? "nil")")
 
             // Update session with call SID
             var updatedSession = session
@@ -329,19 +342,25 @@ class CallManager: ObservableObject {
 
             // Start event processor
             let callId = call.sid ?? session.id.uuidString
+            print("🔴 [CallManager] Using callId for events: \(callId)")
             eventProcessor.startCall(callId: callId)
 
             // Connect event stream for real-time transcription updates
+            print("🔴 [CallManager] Connecting event stream...")
             do {
                 try await webSocketService.connectEventStream(callId: callId)
+                print("🔴 [CallManager] Event stream connected!")
             } catch {
-                print("[CallManager] Failed to connect event stream for outbound call: \(error)")
+                print("🔴 [CallManager] ❌ FAILED to connect event stream: \(error)")
             }
 
             // Send session config via WebSocket
+            print("🔴 [CallManager] Sending session config via WebSocket...")
             try? await webSocketService.sendSessionConfig(config)
+            print("🔴 [CallManager] ========== CALL SETUP COMPLETE ==========")
 
         } catch {
+            print("🔴 [CallManager] ❌ CALL FAILED: \(error)")
             callState = .error(error)
             currentSession = nil
             lastError = error

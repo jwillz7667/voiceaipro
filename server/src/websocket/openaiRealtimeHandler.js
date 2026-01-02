@@ -589,15 +589,28 @@ function handleInputTranscription(session, message, state) {
   const transcript = message.transcript;
   const itemId = message.item_id;
 
+  logger.info('🔴 [TRANSCRIPT] handleInputTranscription called', {
+    callSid: session.callSid,
+    hasTranscript: !!transcript,
+    transcriptLength: transcript?.length || 0,
+    itemId,
+    eventSubscriberCount: session.eventSubscribers?.size || 0,
+  });
+
   if (transcript) {
     // Save to session transcripts
     session.addTranscript('user', transcript);
 
     // Broadcast to iOS client
+    logger.info('🔴 [TRANSCRIPT] Broadcasting transcript.user event', {
+      callSid: session.callSid,
+      text: transcript.substring(0, 50),
+    });
     session.broadcastEvent('transcript.user', {
       text: transcript,
       itemId,
     });
+    logger.info('🔴 [TRANSCRIPT] Broadcast complete');
 
     logger.info('User transcript', {
       callSid: session.callSid,

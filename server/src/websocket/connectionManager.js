@@ -126,6 +126,14 @@ class CallSession {
   }
 
   broadcastEvent(eventType, data) {
+    logger.info('🔵 [BROADCAST] ========== BROADCAST EVENT ==========', {
+      eventType,
+      callSid: this.callSid,
+      hasIosWs: !!this.iosWs,
+      iosWsState: this.iosWs?.readyState,
+      sessionSubscriberCount: this.eventSubscribers.size,
+    });
+
     const event = this.addEvent(eventType, 'outgoing', data);
     const message = JSON.stringify({
       type: eventType,
@@ -134,41 +142,54 @@ class CallSession {
       data,
     });
 
+    logger.info('🔵 [BROADCAST] Message built', { messageLength: message.length });
+
+    let sentCount = 0;
+
     // Send to iOS control channel
     if (this.iosWs && this.iosWs.readyState === 1) {
       try {
         this.iosWs.send(message);
+        sentCount++;
+        logger.info('🔵 [BROADCAST] ✅ Sent to iOS control channel');
       } catch (error) {
-        logger.error('Failed to send event to iOS client', { callSid: this.callSid, error });
+        logger.error('🔵 [BROADCAST] ❌ Failed to send to iOS client', { callSid: this.callSid, error });
       }
     }
 
     // Send to all event stream subscribers on this session
-    this.eventSubscribers.forEach((ws) => {
+    this.eventSubscribers.forEach((ws, index) => {
       if (ws.readyState === 1) {
         try {
           ws.send(message);
+          sentCount++;
+          logger.info('🔵 [BROADCAST] ✅ Sent to session subscriber');
         } catch (error) {
-          logger.error('Failed to send to event subscriber', { callSid: this.callSid, error });
+          logger.error('🔵 [BROADCAST] ❌ Failed to send to session subscriber', { callSid: this.callSid, error });
         }
+      } else {
+        logger.warn('🔵 [BROADCAST] Session subscriber not ready', { readyState: ws.readyState });
       }
     });
 
     // Also check connectionManager's pending subscribers (fallback for race conditions)
-    // connectionManager is the singleton defined at the bottom of this file
     const pendingSubscribers = connectionManager?.eventSubscribers?.get(this.callSid);
     if (pendingSubscribers) {
+      logger.info('🔵 [BROADCAST] Found pending subscribers', { count: pendingSubscribers.size });
       pendingSubscribers.forEach((ws) => {
         if (ws.readyState === 1 && !this.eventSubscribers.has(ws)) {
           try {
             ws.send(message);
+            sentCount++;
+            logger.info('🔵 [BROADCAST] ✅ Sent to pending subscriber');
           } catch (error) {
-            logger.error('Failed to send to pending subscriber', { callSid: this.callSid, error });
+            logger.error('🔵 [BROADCAST] ❌ Failed to send to pending subscriber', { callSid: this.callSid, error });
           }
         }
       });
     }
 
+    logger.info('🔵 [BROADCAST] Complete', { totalSent: sentCount, eventType });
     return event;
   }
 

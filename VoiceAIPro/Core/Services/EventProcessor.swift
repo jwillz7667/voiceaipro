@@ -65,6 +65,12 @@ class EventProcessor: ObservableObject {
 
     /// Process an incoming event
     func processEvent(_ event: CallEvent) {
+        print("🟣 [EventProcessor] ========== PROCESS EVENT ==========")
+        print("🟣 [EventProcessor] Event type: \(event.eventType.rawValue)")
+        print("🟣 [EventProcessor] Event display: \(event.eventType.displayName)")
+        print("🟣 [EventProcessor] Call ID: \(event.callId)")
+        print("🟣 [EventProcessor] Payload preview: \(String(event.payload?.prefix(200) ?? "nil"))")
+
         // Add to events list with limit
         events.append(event)
         if events.count > maxEvents {

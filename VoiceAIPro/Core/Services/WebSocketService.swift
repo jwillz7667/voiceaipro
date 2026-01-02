@@ -173,25 +173,33 @@ class WebSocketService: ObservableObject {
     /// Connect to event stream for a specific call
     func connectEventStream(callId: String) async throws {
         let urlString = "\(baseURL)\(Constants.API.WebSocket.events)/\(callId)"
-        print("[WebSocketService] Connecting event stream to: \(urlString)")
+        print("🟢 [WebSocketService] ========== CONNECT EVENT STREAM ==========")
+        print("🟢 [WebSocketService] Base URL: \(baseURL)")
+        print("🟢 [WebSocketService] Events path: \(Constants.API.WebSocket.events)")
+        print("🟢 [WebSocketService] Call ID: \(callId)")
+        print("🟢 [WebSocketService] Full URL: \(urlString)")
 
         guard let url = URL(string: urlString) else {
-            print("[WebSocketService] Invalid event stream URL")
+            print("🟢 [WebSocketService] ❌ INVALID URL!")
             throw WebSocketError.invalidURL
         }
 
+        print("🟢 [WebSocketService] Creating WebSocketClient...")
         eventClient = WebSocketClient(url: url)
 
         do {
+            print("🟢 [WebSocketService] Calling connect()...")
             try await eventClient?.connect()
             isEventConnected = true
-            print("[WebSocketService] Event stream connected successfully")
+            print("🟢 [WebSocketService] ✅ CONNECTED!")
 
             // Start receiving events
+            print("🟢 [WebSocketService] Starting receive loop...")
             startEventReceiving()
+            print("🟢 [WebSocketService] Receive loop started!")
 
         } catch {
-            print("[WebSocketService] Event stream connection failed: \(error)")
+            print("🟢 [WebSocketService] ❌ CONNECTION FAILED: \(error)")
             lastError = error
             throw error
         }
@@ -258,20 +266,35 @@ class WebSocketService: ObservableObject {
     }
 
     private func startEventReceiving() {
+        print("🟡 [WebSocketService] startEventReceiving() called")
         eventReceiveTask?.cancel()
         eventReceiveTask = Task {
-            guard let client = eventClient else { return }
+            print("🟡 [WebSocketService] Event receive task started")
+            guard let client = eventClient else {
+                print("🟡 [WebSocketService] ❌ eventClient is NIL!")
+                return
+            }
+            print("🟡 [WebSocketService] eventClient exists, starting receive loop...")
 
             do {
+                var messageCount = 0
                 for try await message in await client.receive() {
-                    if Task.isCancelled { break }
+                    messageCount += 1
+                    print("🟡 [WebSocketService] ========== EVENT #\(messageCount) RECEIVED ==========")
+                    print("🟡 [WebSocketService] Raw: \(message.stringValue ?? "nil")")
+                    if Task.isCancelled {
+                        print("🟡 [WebSocketService] Task cancelled, breaking")
+                        break
+                    }
                     handleEventMessage(message)
                 }
+                print("🟡 [WebSocketService] Receive loop ended normally, total messages: \(messageCount)")
             } catch {
-                print("[WebSocketService] Event receive error: \(error)")
+                print("🟡 [WebSocketService] ❌ Event receive error: \(error)")
             }
 
             // Connection ended
+            print("🟡 [WebSocketService] Connection ended, setting isEventConnected = false")
             await MainActor.run {
                 isEventConnected = false
             }
@@ -314,41 +337,53 @@ class WebSocketService: ObservableObject {
     }
 
     private func handleEventMessage(_ message: WebSocketMessage) {
-        print("[WebSocketService] Event received: \(message.stringValue ?? "nil")")
+        print("🔵 [WebSocketService] handleEventMessage called")
 
         guard let json = message.jsonValue else {
-            print("[WebSocketService] Failed to parse event as JSON")
+            print("🔵 [WebSocketService] ❌ Failed to parse as JSON!")
+            print("🔵 [WebSocketService] Raw string: \(message.stringValue ?? "nil")")
             return
         }
+
+        print("🔵 [WebSocketService] JSON keys: \(json.keys.joined(separator: ", "))")
 
         // Extract event type
         guard let typeString = json["type"] as? String else {
-            print("[WebSocketService] Event missing 'type' field")
+            print("🔵 [WebSocketService] ❌ Missing 'type' field!")
             return
         }
+
+        print("🔵 [WebSocketService] Type string: '\(typeString)'")
 
         guard let eventType = EventType(rawValue: typeString) else {
-            print("[WebSocketService] Unknown event type: \(typeString)")
+            print("🔵 [WebSocketService] ❌ Unknown event type: '\(typeString)'")
+            print("🔵 [WebSocketService] Known types: \(EventType.allCases.map { $0.rawValue })")
             return
         }
 
-        print("[WebSocketService] Processing event: \(eventType.displayName)")
+        print("🔵 [WebSocketService] ✅ Event type matched: \(eventType.displayName)")
 
         // Parse event - server sends "callSid" not "call_id"
+        let callSid = json["callSid"] as? String ?? json["call_id"] as? String ?? ""
+        print("🔵 [WebSocketService] CallSid: \(callSid)")
+
         let event = CallEvent(
             id: UUID(),
             timestamp: Date(),
-            callId: json["callSid"] as? String ?? json["call_id"] as? String ?? "",
+            callId: callSid,
             eventType: eventType,
             direction: .incoming,
             payload: message.stringValue
         )
 
         // Notify
+        print("🔵 [WebSocketService] Calling onEvent callback (exists: \(onEvent != nil))")
         onEvent?(event)
+        print("🔵 [WebSocketService] onEvent callback completed")
 
         // Call registered handler
         if let handler = messageHandlers[typeString] {
+            print("🔵 [WebSocketService] Calling registered handler for '\(typeString)'")
             handler(json)
         }
     }
