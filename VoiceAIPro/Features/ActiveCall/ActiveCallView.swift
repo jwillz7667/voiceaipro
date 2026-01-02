@@ -182,7 +182,7 @@ struct ActiveCallView: View {
     }
 
     private func sendDigit(_ digit: String) {
-        container.callManager.sendDTMF(digit)
+        container.callManager.sendDigits(digit)
     }
 }
 

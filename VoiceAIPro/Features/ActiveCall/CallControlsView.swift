@@ -101,13 +101,16 @@ struct CallControlButton: View {
         Button(action: action) {
             VStack(spacing: 8) {
                 ZStack {
-                    Circle()
-                        .fill(isActive ? activeColor.opacity(0.2) : .thinMaterial)
-                        .frame(width: 64, height: 64)
-
                     if isActive {
                         Circle()
+                            .fill(activeColor.opacity(0.2))
+                            .frame(width: 64, height: 64)
+                        Circle()
                             .stroke(activeColor.opacity(0.5), lineWidth: 2)
+                            .frame(width: 64, height: 64)
+                    } else {
+                        Circle()
+                            .fill(.ultraThinMaterial)
                             .frame(width: 64, height: 64)
                     }
 

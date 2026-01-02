@@ -317,6 +317,7 @@ function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update schema
   // Voice and audio formats are set via WebSocket URL params
   const sessionConfig = {
+    type: 'realtime',
     instructions: cfg.instructions || getDefaultInstructions(),
   };
 

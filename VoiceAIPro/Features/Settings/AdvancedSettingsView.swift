@@ -343,40 +343,6 @@ struct TranscriptionRow: View {
     }
 }
 
-// MARK: - Model Extensions
-
-extension RealtimeModel {
-    var displayName: String {
-        switch self {
-        case .gptRealtime: return "GPT Realtime"
-        case .gptRealtimeMini: return "GPT Realtime Mini"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .gptRealtime: return "Full-featured, complex conversations"
-        case .gptRealtimeMini: return "Faster, simpler responses"
-        }
-    }
-}
-
-extension TranscriptionModel {
-    var displayName: String {
-        switch self {
-        case .whisper1: return "Whisper-1"
-        case .gpt4oTranscribe: return "GPT-4o Transcribe"
-        }
-    }
-
-    var description: String {
-        switch self {
-        case .whisper1: return "Fast, reliable transcription"
-        case .gpt4oTranscribe: return "More accurate, context-aware"
-        }
-    }
-}
-
 #Preview {
     NavigationStack {
         AdvancedSettingsView(config: .constant(RealtimeConfig.default))
