@@ -4,108 +4,130 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VoiceAI Pro (codenamed "real") is an iOS application for bidirectional AI voice calling. It integrates OpenAI's Realtime API with Twilio's Programmable Voice SDK to enable AI-powered phone conversations.
+VoiceAI Pro is a bidirectional AI voice calling system consisting of:
+1. **iOS App** - SwiftUI app with Twilio Voice SDK for making/receiving calls
+2. **Bridge Server** - Node.js WebSocket server connecting Twilio Media Streams to OpenAI Realtime API
+
+The system enables AI-powered phone conversations where an AI agent handles both incoming and outgoing PSTN calls.
 
 ## Build & Run Commands
 
+### iOS App
 ```bash
-# Build the project
-xcodebuild -project real.xcodeproj -scheme real -configuration Debug build
+# Build
+xcodebuild -project real.xcodeproj -scheme real -configuration Debug -destination 'generic/platform=iOS' build
 
 # Run tests
 xcodebuild -project real.xcodeproj -scheme realTests test -destination 'platform=iOS Simulator,name=iPhone 16'
 
-# Run UI tests
-xcodebuild -project real.xcodeproj -scheme realUITests test -destination 'platform=iOS Simulator,name=iPhone 16'
-
-# Build for release
-xcodebuild -project real.xcodeproj -scheme real -configuration Release build
+# Or use Xcode: ⌘B to build, ⌘R to run
 ```
 
-Alternatively, open `real.xcodeproj` in Xcode and use ⌘B to build, ⌘R to run.
+### Server
+```bash
+cd server
 
-## Technology Stack
+# Install dependencies
+npm install
 
-- **Language:** Swift 5.0
-- **UI Framework:** SwiftUI
-- **Data Persistence:** SwiftData
-- **Minimum iOS:** 17.0
-- **Concurrency:** Swift Concurrency with MainActor isolation
+# Run development server (with hot reload)
+npm run dev
+
+# Run production
+npm start
+
+# Run database migrations
+npm run migrate
+
+# Lint
+npm run lint
+```
 
 ## Architecture
 
-This is a SwiftUI app using MVVM architecture with SwiftData for persistence:
+### System Flow
+```
+iOS App ←→ Twilio Voice SDK ←→ Twilio Cloud (PSTN)
+                                    ↓
+                            Bridge Server (Node.js)
+                              ↓           ↓
+                    Twilio Media    OpenAI Realtime
+                    Streams         API (gpt-realtime)
+                    (μ-law 8kHz)    (PCM16 24kHz)
+```
 
-### App Layer
-- **VoiceAIProApp.swift** - Main entry point, configures ModelContainer and services
-- **AppDelegate.swift** - System events, PushKit, and VoIP push handling
-- **ContentView.swift** - Tab-based UI with all feature screens
-
-### Core Layer
-- **Core/Models/** - CallSession, RealtimeConfig, CallEvent, Prompt
-- **Core/Services/** - TwilioVoiceService, CallKitManager, AudioSessionManager
+### iOS App Structure (`VoiceAIPro/`)
+- **App/** - VoiceAIProApp.swift (entry point), AppDelegate.swift (PushKit/VoIP)
 - **Core/Managers/** - AppState (global state), CallManager (orchestrator)
-- **Core/DI/** - DIContainer (dependency injection)
+- **Core/Services/** - TwilioVoiceService, CallKitManager, AudioSessionManager
+- **Core/Models/** - CallSession, RealtimeConfig, CallEvent, Prompt
+- **Data/SwiftData/** - CallRecord, SavedPrompt, EventLogEntry, UserSettings
+- **Utilities/Constants.swift** - API URLs, toggle `useLocalServer` for dev/prod
 
-### Data Layer
-- **Data/SwiftData/** - CallRecord, SavedPrompt, EventLogEntry
-- **Data/Networking/** - APIClient, WebSocketClient (in DIContainer)
+### Server Structure (`server/src/`)
+- **index.js** - Express app, WebSocket server setup, health endpoints
+- **websocket/** - Connection handlers:
+  - `twilioMediaHandler.js` - Twilio Media Stream processing
+  - `openaiRealtimeHandler.js` - OpenAI Realtime API client, **default instructions here**
+  - `connectionManager.js` - Session management, **default VAD config here**
+  - `iosClientHandler.js` - iOS app WebSocket connections
+- **routes/** - REST endpoints (token, twiml, calls, prompts, recordings)
+- **db/** - PostgreSQL queries and migrations
+- **audio/** - μ-law ↔ PCM16 conversion
 
-### Utilities
-- **Utilities/Constants.swift** - API URLs, Twilio config, audio settings
-- **Utilities/Extensions/** - Color, View, Date, String extensions
+## Key Configuration Points
 
-## Key Dependencies
-
-### Required - Add via Swift Package Manager in Xcode
-
-1. **TwilioVoice** (~> 6.13)
-   - URL: `https://github.com/twilio/twilio-voice-ios`
-   - Used for: VoIP signaling and audio
-
-To add: Xcode → File → Add Package Dependencies → Enter URL
-
-### Native Frameworks (no import needed)
-- SwiftData - Local persistence
-- Combine - Reactive programming
-- CallKit - Native call UI
-- PushKit - VoIP push notifications
-- AVFoundation - Audio session management
-
-## Service Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        CallManager                          │
-│              (High-level orchestrator)                      │
-└─────────────────────────────────────────────────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│ TwilioVoice     │  │ CallKitManager  │  │ AudioSession    │
-│ Service         │  │                 │  │ Manager         │
-│                 │  │ - CXProvider    │  │                 │
-│ - TVOCall       │  │ - CXController  │  │ - AVAudioSession│
-│ - TVOCallInvite │  │ - CallKit UI    │  │ - Route mgmt    │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
+### AI Instructions & Voice
+Edit `server/src/websocket/openaiRealtimeHandler.js`:
+```javascript
+function getDefaultInstructions() {
+  return `Your custom AI instructions here...`;
+}
 ```
 
-## VoIP Push Flow
+### VAD (Voice Activity Detection)
+Edit `server/src/websocket/connectionManager.js`:
+```javascript
+vadType: 'semantic_vad',  // or 'server_vad'
+vadConfig: {
+  eagerness: 'high',      // 'low', 'medium', 'high', 'auto'
+}
+```
 
-1. Server sends VoIP push via APNs
-2. PKPushRegistry receives push in AppDelegate
-3. AppDelegate calls CallManager.handleIncomingPush()
-4. CallManager → TwilioVoiceService → CallKitManager
-5. CallKit displays incoming call UI
-6. User answers → Audio session activated → Call connected
+### Server URL (iOS)
+Edit `VoiceAIPro/Utilities/Constants.swift`:
+```swift
+static let useLocalServer = false  // true for localhost:3000
+static let productionURL = "https://your-server.railway.app"
+```
 
-## Testing
+## Environment Variables (server/.env)
 
-Uses Swift Testing framework (`import Testing`) with `@Test` attributes for unit tests.
+Required:
+- `DATABASE_URL` - PostgreSQL connection string
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
+- `OPENAI_API_KEY`
 
-## Important Notes
+Optional (for iOS SDK tokens):
+- `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWIML_APP_SID`
 
-- VoIP push MUST report to CallKit immediately or iOS terminates the app
-- Audio session activation happens in CallKit delegate, not before
-- All call cleanup must happen in error paths (defensive programming)
-- TwilioVoiceService uses protocol abstractions for SDK types (allows testing without SDK)
+## API Endpoints
+
+- `GET /health` - Simple health check (for Railway)
+- `GET /status` - Detailed status with DB and Twilio info
+- `POST /api/token` - Generate Twilio access token (requires API Key/Secret)
+- `POST /twiml/incoming` - TwiML webhook for incoming calls
+- `POST /twiml/outgoing` - TwiML webhook for outgoing calls
+- `GET /api/prompts` - List saved prompts
+- `GET /api/calls/history` - Call history
+
+WebSocket:
+- `/media-stream` - Twilio Media Stream connection
+- `/ios-client` - iOS app real-time events
+- `/events/:callId` - Call event streaming
+
+## Tech Stack
+
+**iOS:** Swift 5, SwiftUI, SwiftData, CallKit, PushKit, TwilioVoice SDK
+**Server:** Node.js 20+, Express, ws, pg (PostgreSQL), Twilio SDK
+**Deployment:** Railway (server), App Store (iOS)

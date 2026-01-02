@@ -104,7 +104,11 @@ class WebSocketService: ObservableObject {
 
     /// Connect to control channel for sending config and receiving call status
     func connectControlChannel() async throws {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.WebSocket.iosClient)?device_id=\(deviceId)") else {
+        let urlString = "\(baseURL)\(Constants.API.WebSocket.iosClient)?device_id=\(deviceId)"
+        print("[WebSocketService] Connecting to: \(urlString)")
+
+        guard let url = URL(string: urlString) else {
+            print("[WebSocketService] Invalid URL")
             throw WebSocketError.invalidURL
         }
 

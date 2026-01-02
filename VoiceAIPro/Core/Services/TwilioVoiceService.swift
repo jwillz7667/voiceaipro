@@ -149,12 +149,21 @@ class TwilioVoiceService: NSObject, ObservableObject {
 
     /// Initialize the Twilio Voice SDK
     func initialize() async throws {
+        print("[TwilioVoiceService] Initializing, deviceId: \(deviceId)")
+
         // Fetch initial access token
-        accessToken = try await fetchAccessToken()
+        do {
+            accessToken = try await fetchAccessToken()
+            print("[TwilioVoiceService] Token fetched successfully")
+        } catch {
+            print("[TwilioVoiceService] Token fetch failed: \(error)")
+            throw error
+        }
 
         // Mark as registered once we have a valid token
         // (Full push notification registration happens separately)
         isRegistered = true
+        print("[TwilioVoiceService] isRegistered set to true")
 
         // Configure logging in debug mode
         #if DEBUG

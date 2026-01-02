@@ -175,6 +175,7 @@ class CallManager: ObservableObject {
         twilioService.$isRegistered
             .receive(on: DispatchQueue.main)
             .sink { [weak self] registered in
+                print("[CallManager] Twilio isRegistered changed to: \(registered)")
                 self?.appState?.updateTwilioRegistration(registered)
             }
             .store(in: &cancellables)
@@ -203,6 +204,7 @@ class CallManager: ObservableObject {
         webSocketService.$connectionState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
+                print("[CallManager] WebSocket connectionState changed to: \(state)")
                 self?.webSocketState = state
                 // Map to AppState connection state
                 switch state {
