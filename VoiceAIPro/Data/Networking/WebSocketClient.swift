@@ -51,6 +51,9 @@ actor WebSocketClient {
     /// Message continuation for async stream
     private var messageContinuation: AsyncThrowingStream<WebSocketMessage, Error>.Continuation?
 
+    /// Early messages received before continuation is set
+    private var earlyMessages: [WebSocketMessage] = []
+
     /// Reconnection attempts
     private var reconnectAttempts = 0
 
@@ -88,8 +91,12 @@ actor WebSocketClient {
 
     /// Connect to the WebSocket server
     func connect() async throws {
-        guard state != .connected && state != .connecting else { return }
+        guard state != .connected && state != .connecting else {
+            print("🌐 [WebSocketClient] Already connected or connecting, skipping")
+            return
+        }
 
+        print("🌐 [WebSocketClient] Connecting to: \(url.absoluteString)")
         state = .connecting
         notifyStateChange()
 
@@ -100,11 +107,13 @@ actor WebSocketClient {
         state = .connected
         reconnectAttempts = 0
         notifyStateChange()
+        print("🌐 [WebSocketClient] ✅ Connected!")
 
         // Start ping loop
         startPingLoop()
 
         // Start receiving
+        print("🌐 [WebSocketClient] Starting internal receive loop...")
         startReceiving()
     }
 
@@ -143,8 +152,19 @@ actor WebSocketClient {
 
     /// Get async stream of messages
     func receive() -> AsyncThrowingStream<WebSocketMessage, Error> {
-        AsyncThrowingStream { continuation in
+        print("🌐 [WebSocketClient] receive() called, setting up continuation...")
+        return AsyncThrowingStream { continuation in
             self.messageContinuation = continuation
+
+            // Flush any early messages that arrived before the continuation was set
+            if !self.earlyMessages.isEmpty {
+                print("🌐 [WebSocketClient] Flushing \(self.earlyMessages.count) early messages")
+                for message in self.earlyMessages {
+                    continuation.yield(message)
+                }
+                self.earlyMessages.removeAll()
+            }
+            print("🌐 [WebSocketClient] Continuation ready for messages")
 
             continuation.onTermination = { @Sendable _ in
                 Task { await self.handleStreamTermination() }
@@ -188,34 +208,51 @@ actor WebSocketClient {
     private func startReceiving() {
         receiveTask?.cancel()
         receiveTask = Task {
+            var messageCount = 0
+            print("🌐 [WebSocketClient] Internal receive loop started")
             while !Task.isCancelled && state == .connected {
                 do {
-                    guard let task = task else { break }
+                    guard let task = task else {
+                        print("🌐 [WebSocketClient] No task available, breaking loop")
+                        break
+                    }
                     let message = try await task.receive()
+                    messageCount += 1
 
                     let wsMessage: WebSocketMessage
                     switch message {
                     case .string(let text):
                         wsMessage = .string(text)
+                        print("🌐 [WebSocketClient] Received message #\(messageCount): \(text.prefix(100))...")
                     case .data(let data):
                         wsMessage = .data(data)
+                        print("🌐 [WebSocketClient] Received data message #\(messageCount): \(data.count) bytes")
                     @unknown default:
                         continue
                     }
 
-                    // Notify via continuation
-                    messageContinuation?.yield(wsMessage)
+                    // Notify via continuation or queue for later
+                    if let continuation = messageContinuation {
+                        print("🌐 [WebSocketClient] Yielding to continuation")
+                        continuation.yield(wsMessage)
+                    } else {
+                        // Queue early messages that arrive before receive() is called
+                        print("🌐 [WebSocketClient] ⚠️ No continuation yet, queuing message")
+                        earlyMessages.append(wsMessage)
+                    }
 
                     // Notify via callback
                     onMessage?(wsMessage)
 
                 } catch {
+                    print("🌐 [WebSocketClient] ❌ Receive error: \(error)")
                     if !Task.isCancelled {
                         await handleDisconnect(error: error)
                     }
                     break
                 }
             }
+            print("🌐 [WebSocketClient] Internal receive loop ended, total messages: \(messageCount)")
         }
     }
 
