@@ -315,13 +315,40 @@ function sendSessionConfig(session) {
  * Maps our configuration schema to OpenAI's expected format
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime API uses minimal session config
-  // Most settings (voice, VAD, etc.) are configured via the WebSocket URL or are defaults
-  // See: https://platform.openai.com/docs/guides/realtime
   const sessionConfig = {
-    type: 'realtime',  // Required: 'realtime' or 'transcription'
+    modalities: ['text', 'audio'],
     instructions: cfg.instructions || getDefaultInstructions(),
+    voice: cfg.voice || 'marin',
+    input_audio_format: 'g711_ulaw',
+    output_audio_format: 'g711_ulaw',
+    input_audio_transcription: {
+      model: cfg.transcriptionModel || 'gpt-4o-transcribe',
+    },
+    temperature: cfg.temperature || 0.8,
+    max_response_output_tokens: cfg.maxOutputTokens || 4096,
   };
+
+  // Configure turn detection (VAD)
+  if (cfg.vadType === 'semantic_vad') {
+    sessionConfig.turn_detection = {
+      type: 'semantic_vad',
+      eagerness: cfg.vadConfig?.eagerness || 'medium',
+      create_response: cfg.vadConfig?.createResponse !== false,
+      interrupt_response: cfg.vadConfig?.interruptResponse !== false,
+    };
+  } else if (cfg.vadType === 'server_vad') {
+    sessionConfig.turn_detection = {
+      type: 'server_vad',
+      threshold: cfg.vadConfig?.threshold || 0.5,
+      prefix_padding_ms: cfg.vadConfig?.prefixPaddingMs || 300,
+      silence_duration_ms: cfg.vadConfig?.silenceDurationMs || 500,
+      create_response: cfg.vadConfig?.createResponse !== false,
+      interrupt_response: cfg.vadConfig?.interruptResponse !== false,
+    };
+  } else {
+    // Disabled - we handle turn detection manually
+    sessionConfig.turn_detection = null;
+  }
 
   return sessionConfig;
 }
@@ -540,27 +567,37 @@ function handleSessionUpdated(session, message, state) {
  */
 function handleSpeechStarted(session, message, state) {
   const audioStartMs = message.audio_start_ms;
+  const vadConfig = session.config?.vadConfig;
+  const openaiHandlesInterruption = vadConfig?.interruptResponse !== false;
 
   logger.debug('Speech started', {
     callSid: session.callSid,
     audioStartMs,
     wasResponding: state.isResponding,
     wasPlayingAudio: state.isPlayingAudio,
+    openaiHandlesInterruption,
   });
 
-  // INTERRUPTION: If AI is currently speaking, cancel the response
+  // INTERRUPTION: If AI is currently speaking
   if (state.isResponding || state.isPlayingAudio) {
-    logger.info('Interrupting AI response due to user speech', {
-      callSid: session.callSid,
-      responseId: state.currentResponseId,
-    });
-
     state.interruptionCount++;
 
-    // Cancel OpenAI response
-    cancelResponse(session);
+    // Only manually cancel if OpenAI's turn_detection doesn't handle it
+    // When interrupt_response is enabled, OpenAI cancels automatically
+    if (!openaiHandlesInterruption) {
+      logger.info('Manually interrupting AI response due to user speech', {
+        callSid: session.callSid,
+        responseId: state.currentResponseId,
+      });
+      cancelResponse(session);
+    } else {
+      logger.info('User speech detected during response (OpenAI handles interruption)', {
+        callSid: session.callSid,
+        responseId: state.currentResponseId,
+      });
+    }
 
-    // Clear Twilio audio buffer
+    // Always clear Twilio audio buffer to stop playback immediately
     clearTwilioBuffer(session);
 
     session.broadcastEvent('response.interrupted', {
