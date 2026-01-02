@@ -4,6 +4,9 @@ import SwiftData
 /// SwiftData model for storing favorite contacts for quick dialing
 @Model
 final class FavoriteContact {
+    /// Unique identifier
+    @Attribute(.unique) var id: UUID
+
     /// Contact name
     var name: String
 
@@ -26,11 +29,13 @@ final class FavoriteContact {
     var callCount: Int
 
     init(
+        id: UUID = UUID(),
         name: String,
         phoneNumber: String,
         colorName: String = "blue",
         sortOrder: Int = 0
     ) {
+        self.id = id
         self.name = name
         self.phoneNumber = phoneNumber.filter { $0.isNumber || $0 == "+" }
         self.colorName = colorName

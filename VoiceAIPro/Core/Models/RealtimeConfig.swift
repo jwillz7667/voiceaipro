@@ -10,7 +10,7 @@ struct RealtimeConfig: Codable, Equatable {
     var voiceSpeed: Double = 1.0
     var vadConfig: VADConfig = .serverVAD()
     var noiseReduction: NoiseReduction? = nil
-    var transcriptionModel: TranscriptionModel = .whisper1
+    var transcriptionModel: TranscriptionModel = .gpt4oTranscribe
     var temperature: Double = 0.8
     var maxOutputTokens: Int = 4096
     var instructions: String = ""
@@ -268,22 +268,22 @@ enum NoiseReduction: String, Codable, CaseIterable, Identifiable {
 
 /// Available transcription models for user speech
 enum TranscriptionModel: String, Codable, CaseIterable, Identifiable {
-    case whisper1 = "whisper-1"
     case gpt4oTranscribe = "gpt-4o-transcribe"
+    case gpt4oMiniTranscribe = "gpt-4o-mini-transcribe"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .whisper1: return "Whisper"
         case .gpt4oTranscribe: return "GPT-4o Transcribe"
+        case .gpt4oMiniTranscribe: return "GPT-4o Mini Transcribe"
         }
     }
 
     var description: String {
         switch self {
-        case .whisper1: return "Fast, reliable transcription"
-        case .gpt4oTranscribe: return "More accurate, context-aware"
+        case .gpt4oTranscribe: return "Best accuracy, context-aware (Recommended)"
+        case .gpt4oMiniTranscribe: return "Faster, more cost-effective"
         }
     }
 }

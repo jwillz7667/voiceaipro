@@ -1,7 +1,7 @@
 import SwiftUI
 import SwiftData
 
-/// Main content view with 3-tab navigation
+/// Main content view with 5-tab navigation
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DIContainer
@@ -14,7 +14,7 @@ struct ContentView: View {
             TabView(selection: $selectedTab) {
                 HomeView()
                     .tabItem {
-                        Label("Home", systemImage: "house.fill")
+                        Label("Home", systemImage: "phone.fill")
                     }
                     .tag(Tab.home)
 
@@ -23,6 +23,18 @@ struct ContentView: View {
                         Label("History", systemImage: "clock.fill")
                     }
                     .tag(Tab.history)
+
+                TranscriptsView()
+                    .tabItem {
+                        Label("Transcripts", systemImage: "text.bubble.fill")
+                    }
+                    .tag(Tab.transcripts)
+
+                RecordingsView()
+                    .tabItem {
+                        Label("Recordings", systemImage: "waveform.circle.fill")
+                    }
+                    .tag(Tab.recordings)
 
                 SettingsView()
                     .tabItem {
@@ -69,6 +81,8 @@ struct ContentView: View {
 enum Tab: String, CaseIterable {
     case home
     case history
+    case transcripts
+    case recordings
     case settings
 }
 
@@ -78,5 +92,5 @@ enum Tab: String, CaseIterable {
     ContentView()
         .environmentObject(AppState())
         .environmentObject(DIContainer.shared)
-        .modelContainer(for: [CallRecord.self, SavedPrompt.self, EventLogEntry.self, FavoriteContact.self], inMemory: true)
+        .modelContainer(for: [CallRecord.self, SavedPrompt.self, EventLogEntry.self, FavoriteContact.self, TranscriptEntry.self, RecordingMetadata.self], inMemory: true)
 }

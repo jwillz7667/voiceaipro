@@ -193,8 +193,6 @@ struct AddFavoriteButton: View {
     }
 }
 
-// Extension to make FavoriteContact identifiable for sheet binding
-extension FavoriteContact: Identifiable {}
 
 #Preview {
     ZStack {

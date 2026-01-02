@@ -39,7 +39,7 @@ struct ActiveCallView: View {
                 }
 
                 Spacer()
-                    .frame(height: 40)
+                    .frame(height: 30)
 
                 // Audio visualization
                 VStack(spacing: 16) {
@@ -60,13 +60,22 @@ struct ActiveCallView: View {
                 .padding(.horizontal, 40)
 
                 Spacer()
-                    .frame(height: 40)
+                    .frame(height: 20)
 
                 // Call duration
                 if appState.callStatus == .connected {
                     Text(formattedDuration)
-                        .font(.system(size: 56, weight: .light, design: .monospaced))
+                        .font(.system(size: 48, weight: .light, design: .monospaced))
                         .foregroundColor(.white)
+                }
+
+                Spacer()
+                    .frame(height: 20)
+
+                // Live transcript view
+                if appState.callStatus == .connected {
+                    LiveTranscriptView(eventProcessor: container.callManager.eventProcessor)
+                        .padding(.horizontal, 16)
                 }
 
                 Spacer()

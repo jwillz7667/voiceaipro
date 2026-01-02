@@ -11,7 +11,7 @@ export function buildSessionConfig(options = {}) {
     vadType = 'server_vad',
     vadConfig = {},
     noiseReduction = null,
-    transcriptionModel = 'whisper-1',
+    transcriptionModel = 'gpt-4o-transcribe',
     temperature = 0.8,
     maxOutputTokens = 4096,
     tools = [],
@@ -271,8 +271,8 @@ export const VAD_TYPES = [
 ];
 
 export const TRANSCRIPTION_MODELS = [
-  { id: 'whisper-1', name: 'Whisper', description: 'Standard transcription' },
-  { id: 'gpt-4o-transcribe', name: 'GPT-4o Transcribe', description: 'Enhanced accuracy' },
+  { id: 'gpt-4o-transcribe', name: 'GPT-4o Transcribe', description: 'Enhanced accuracy (Recommended)' },
+  { id: 'gpt-4o-mini-transcribe', name: 'GPT-4o Mini Transcribe', description: 'Faster, cost-effective' },
 ];
 
 export const NOISE_REDUCTION_TYPES = [

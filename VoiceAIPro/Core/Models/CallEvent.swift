@@ -126,6 +126,18 @@ enum EventType: String, Codable, CaseIterable {
     // Twilio Events
     case twilioMark = "twilio.mark"
 
+    // Server Bridge Events (custom events from our server)
+    case transcriptUser = "transcript.user"
+    case transcriptAssistant = "transcript.assistant"
+    case transcriptAssistantDelta = "transcript.assistant.delta"
+    case serverSpeechStarted = "speech.started"
+    case serverSpeechStopped = "speech.stopped"
+    case responseStarted = "response.started"
+    case responseAudioDoneServer = "response.audio.done"
+    case responseInterrupted = "response.interrupted"
+    case rateLimits = "rate_limits"
+    case openaiDisconnected = "openai.disconnected"
+
     /// Human-readable name
     var displayName: String {
         switch self {
@@ -160,6 +172,16 @@ enum EventType: String, Codable, CaseIterable {
         case .connectionDropped: return "Connection Lost"
         case .recordingSaved: return "Recording Saved"
         case .twilioMark: return "Twilio Mark"
+        case .transcriptUser: return "User Said"
+        case .transcriptAssistant: return "AI Said"
+        case .transcriptAssistantDelta: return "AI Speaking"
+        case .serverSpeechStarted: return "User Speaking"
+        case .serverSpeechStopped: return "User Stopped"
+        case .responseStarted: return "AI Responding"
+        case .responseAudioDoneServer: return "AI Audio Done"
+        case .responseInterrupted: return "AI Interrupted"
+        case .rateLimits: return "Rate Limits"
+        case .openaiDisconnected: return "OpenAI Disconnected"
         }
     }
 
@@ -197,6 +219,16 @@ enum EventType: String, Codable, CaseIterable {
         case .connectionDropped: return "Connection lost"
         case .recordingSaved: return "Recording saved"
         case .twilioMark: return "Playback mark"
+        case .transcriptUser: return "User transcript"
+        case .transcriptAssistant: return "AI transcript"
+        case .transcriptAssistantDelta: return "AI speaking..."
+        case .serverSpeechStarted: return "Listening..."
+        case .serverSpeechStopped: return "User stopped"
+        case .responseStarted: return "AI responding..."
+        case .responseAudioDoneServer: return "Audio complete"
+        case .responseInterrupted: return "Interrupted"
+        case .rateLimits: return "Rate limits"
+        case .openaiDisconnected: return "OpenAI disconnected"
         }
     }
 
@@ -226,6 +258,16 @@ enum EventType: String, Codable, CaseIterable {
         case .connectionDropped: return "wifi.exclamationmark"
         case .recordingSaved: return "waveform.circle"
         case .twilioMark: return "bookmark"
+        case .transcriptUser: return "person.wave.2"
+        case .transcriptAssistant: return "brain.head.profile"
+        case .transcriptAssistantDelta: return "ellipsis.bubble"
+        case .serverSpeechStarted: return "mic.fill"
+        case .serverSpeechStopped: return "mic.slash"
+        case .responseStarted: return "brain"
+        case .responseAudioDoneServer: return "speaker.wave.3"
+        case .responseInterrupted: return "hand.raised"
+        case .rateLimits: return "gauge.with.needle"
+        case .openaiDisconnected: return "wifi.exclamationmark"
         }
     }
 
@@ -244,17 +286,23 @@ enum EventType: String, Codable, CaseIterable {
             return .response
         case .conversationItemCreated, .conversationItemDeleted:
             return .session
-        case .error, .rateLimitsUpdated, .connectionDropped:
+        case .error, .rateLimitsUpdated, .connectionDropped, .openaiDisconnected:
             return .error
         case .callConnected, .callDisconnected, .recordingSaved, .twilioMark:
             return .call
+        case .transcriptUser, .transcriptAssistant, .transcriptAssistantDelta:
+            return .transcript
+        case .serverSpeechStarted, .serverSpeechStopped:
+            return .audio
+        case .responseStarted, .responseAudioDoneServer, .responseInterrupted, .rateLimits:
+            return .response
         }
     }
 
     /// Whether this event type generates high volume (for filtering)
     var isHighVolume: Bool {
         switch self {
-        case .responseAudioDelta, .outputTranscriptDelta:
+        case .responseAudioDelta, .outputTranscriptDelta, .transcriptAssistantDelta:
             return true
         default:
             return false

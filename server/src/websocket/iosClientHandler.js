@@ -72,6 +72,8 @@ export function handleIOSClientConnection(ws, request) {
 
       case 'session.update':
       case 'session.config':
+      case 'call.config.update':
+        // Handle config updates from iOS app - merges with existing config, overriding defaults
         handleSessionUpdate(ws, payload || message.config, context);
         break;
 

@@ -31,6 +31,9 @@ class DIContainer: ObservableObject {
     /// WebSocket service
     @Published private(set) var webSocketService: WebSocketService!
 
+    /// Data manager for SwiftData operations
+    @Published private(set) var dataManager: DataManager?
+
     /// Call manager (high-level orchestrator)
     @Published private(set) var callManager: CallManager!
 
@@ -58,6 +61,10 @@ class DIContainer: ObservableObject {
     /// Initialize with model container and app state (called from App)
     func initialize(modelContainer: ModelContainer, appState: AppState) {
         self.modelContainer = modelContainer
+
+        // Initialize data manager
+        dataManager = DataManager(container: modelContainer)
+        dataManager?.loadInitialData()
 
         // Initialize call-related services
         setupCallServices(appState: appState)
@@ -89,7 +96,8 @@ class DIContainer: ObservableObject {
             callKitManager: callKitManager,
             apiClient: apiClient,
             webSocketService: webSocketService,
-            appState: appState
+            appState: appState,
+            dataManager: dataManager
         )
     }
 

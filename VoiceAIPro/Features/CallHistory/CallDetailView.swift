@@ -9,6 +9,8 @@ struct CallDetailView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showingAddFavorite = false
+    @State private var transcripts: [TranscriptEntry] = []
+    @State private var showFullTranscript = false
 
     var body: some View {
         NavigationStack {
@@ -89,6 +91,37 @@ struct CallDetailView: View {
                     Text("Call Details")
                 }
 
+                // Transcript section
+                if !transcripts.isEmpty {
+                    Section {
+                        ForEach(transcripts) { transcript in
+                            TranscriptRow(transcript: transcript)
+                        }
+
+                        if transcripts.count > 2 {
+                            Button {
+                                showFullTranscript = true
+                            } label: {
+                                HStack {
+                                    Text("View Full Transcript")
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    } header: {
+                        HStack {
+                            Text("Transcript")
+                            Spacer()
+                            Text("\(transcripts.count) entries")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
                 // Technical details
                 if let callSid = call.callSid {
                     Section {
@@ -131,7 +164,19 @@ struct CallDetailView: View {
                     favorite.phoneNumber = call.phoneNumber
                 }
             }
+            .sheet(isPresented: $showFullTranscript) {
+                FullTranscriptView(transcripts: transcripts, phoneNumber: formattedPhoneNumber)
+            }
+            .onAppear {
+                loadTranscripts()
+            }
         }
+    }
+
+    private func loadTranscripts() {
+        guard let callSid = call.callSid else { return }
+        let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
+        transcripts = (try? modelContext.fetch(descriptor)) ?? []
     }
 
     // MARK: - Computed Properties
@@ -280,9 +325,115 @@ struct ActionButton: View {
     }
 }
 
+/// Row displaying a single transcript entry
+struct TranscriptRow: View {
+    let transcript: TranscriptEntry
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: transcript.isUser ? "person.circle.fill" : "sparkles")
+                    .font(.system(size: 12))
+                    .foregroundColor(transcript.isUser ? .green : .blue)
+
+                Text(transcript.speakerDisplayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(transcript.isUser ? .green : .blue)
+
+                Spacer()
+
+                Text(transcript.formattedTimestamp)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+            }
+
+            Text(transcript.content)
+                .font(.system(size: 14))
+                .foregroundColor(.primary)
+                .lineLimit(3)
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+/// Full transcript view sheet
+struct FullTranscriptView: View {
+    let transcripts: [TranscriptEntry]
+    let phoneNumber: String
+
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(transcripts) { transcript in
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 6) {
+                                Image(systemName: transcript.isUser ? "person.circle.fill" : "sparkles")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(transcript.isUser ? .green : .blue)
+
+                                Text(transcript.speakerDisplayName)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(transcript.isUser ? .green : .blue)
+
+                                Spacer()
+
+                                Text(transcript.formattedTimestamp)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Text(transcript.content)
+                                .font(.system(size: 15))
+                                .foregroundColor(.primary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding()
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(transcript.isUser ? Color.green.opacity(0.08) : Color.blue.opacity(0.08))
+                        )
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Transcript")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarLeading) {
+                    ShareLink(
+                        item: formattedTranscriptText,
+                        subject: Text("Call Transcript"),
+                        message: Text("Transcript from call with \(phoneNumber)")
+                    ) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+        }
+    }
+
+    private var formattedTranscriptText: String {
+        var text = "Call Transcript - \(phoneNumber)\n\n"
+        for transcript in transcripts {
+            text += "[\(transcript.formattedTimestamp)] \(transcript.speakerDisplayName):\n"
+            text += "\(transcript.content)\n\n"
+        }
+        return text
+    }
+}
+
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CallRecord.self, configurations: config)
+    let container = try! ModelContainer(for: CallRecord.self, TranscriptEntry.self, configurations: config)
 
     let call = CallRecord(
         direction: "outbound",

@@ -50,7 +50,7 @@ struct HomeView: View {
                 .padding(.bottom, 100) // Space for tab bar
             }
             .background(Color(.systemGroupedBackground))
-            .navigationTitle("VoiceAI Pro")
+            .navigationTitle("VoxAI")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {

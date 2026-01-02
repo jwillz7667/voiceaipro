@@ -61,6 +61,7 @@ class CallManager: ObservableObject {
     private let apiClient: APIClientProtocol
     private let webSocketService: WebSocketService
     private weak var appState: AppState?
+    private let dataManager: DataManager?
 
     // MARK: - Private Properties
 
@@ -81,7 +82,8 @@ class CallManager: ObservableObject {
         audioSessionManager: AudioSessionManager = .shared,
         apiClient: APIClientProtocol,
         webSocketService: WebSocketService,
-        appState: AppState
+        appState: AppState,
+        dataManager: DataManager?
     ) {
         self.twilioService = twilioService
         self.callKitManager = callKitManager
@@ -89,6 +91,7 @@ class CallManager: ObservableObject {
         self.apiClient = apiClient
         self.webSocketService = webSocketService
         self.appState = appState
+        self.dataManager = dataManager
 
         setupCallbacks()
         setupBindings()
@@ -474,7 +477,7 @@ class CallManager: ObservableObject {
             callState = .idle
         }
 
-        // Update session
+        // Update session and save to database
         if var session = currentSession {
             session.status = .ended
             session.endedAt = Date()
@@ -483,6 +486,9 @@ class CallManager: ObservableObject {
             }
             currentSession = session
             appState?.endCall()
+
+            // Save call record and transcripts to SwiftData
+            saveCallRecordAndTranscripts(session: session)
         }
 
         // Cleanup WebSocket
@@ -496,6 +502,53 @@ class CallManager: ObservableObject {
         callStartTime = nil
         isMuted = false
         isSpeakerEnabled = false
+    }
+
+    /// Save call record and transcripts to SwiftData
+    private func saveCallRecordAndTranscripts(session: CallSession) {
+        guard let dataManager = dataManager else {
+            print("[CallManager] DataManager not available, cannot save call record")
+            return
+        }
+
+        do {
+            // Save the call record
+            try dataManager.saveCallRecord(session)
+            print("[CallManager] Call record saved: \(session.id)")
+
+            // Save user transcript if available
+            let userText = eventProcessor.userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !userText.isEmpty {
+                let userEntry = TranscriptEntry.user(
+                    content: userText,
+                    callSid: session.callSid,
+                    timestampMs: session.durationSeconds.map { $0 * 1000 }
+                )
+                try dataManager.saveTranscript(userEntry)
+                print("[CallManager] User transcript saved")
+            }
+
+            // Save AI transcript if available
+            let aiText = eventProcessor.aiTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !aiText.isEmpty {
+                let aiEntry = TranscriptEntry.assistant(
+                    content: aiText,
+                    callSid: session.callSid,
+                    timestampMs: session.durationSeconds.map { $0 * 1000 }
+                )
+                try dataManager.saveTranscript(aiEntry)
+                print("[CallManager] AI transcript saved")
+            }
+
+            // Save events
+            let events = eventProcessor.events
+            if !events.isEmpty, let callSid = session.callSid {
+                try dataManager.saveEvents(events, for: callSid)
+                print("[CallManager] \(events.count) events saved")
+            }
+        } catch {
+            print("[CallManager] Failed to save call record: \(error)")
+        }
     }
 
     private func handleIncomingCall(_ invite: TVOCallInviteProtocol) {

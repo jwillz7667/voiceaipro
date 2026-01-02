@@ -146,6 +146,37 @@ class EventProcessor: ObservableObject {
         case .inputAudioTranscriptionFailed:
             lastError = event
 
+        // Server bridge events (custom events from our server)
+        case .transcriptUser:
+            handleServerUserTranscript(event)
+
+        case .transcriptAssistant:
+            handleServerAssistantTranscript(event)
+
+        case .transcriptAssistantDelta:
+            handleServerAssistantDelta(event)
+
+        case .serverSpeechStarted:
+            isUserSpeaking = true
+
+        case .serverSpeechStopped:
+            isUserSpeaking = false
+
+        case .responseStarted:
+            currentAIResponse = ""
+            isAISpeaking = true
+
+        case .responseAudioDoneServer:
+            isAISpeaking = false
+
+        case .responseInterrupted:
+            currentAIResponse = ""
+            isAISpeaking = false
+
+        case .rateLimits, .openaiDisconnected:
+            // Log but no special handling
+            break
+
         default:
             // Other events - no special handling
             break
@@ -291,6 +322,43 @@ class EventProcessor: ObservableObject {
 
     private func handleConversationItemDeleted(_ event: CallEvent) {
         // Conversation item removed
+    }
+
+    // MARK: - Server Bridge Event Handlers
+
+    private func handleServerUserTranscript(_ event: CallEvent) {
+        guard let payload = event.payload,
+              let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        // Server sends transcript in "text" or "content" field
+        if let transcript = json["text"] as? String ?? json["content"] as? String {
+            currentUserSpeech = transcript
+            appendToUserTranscript(transcript)
+        }
+    }
+
+    private func handleServerAssistantTranscript(_ event: CallEvent) {
+        guard let payload = event.payload,
+              let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        // Server sends transcript in "text" or "content" field
+        if let transcript = json["text"] as? String ?? json["content"] as? String {
+            appendToAITranscript(transcript)
+            currentAIResponse = ""  // Clear streaming response since we have final
+        }
+    }
+
+    private func handleServerAssistantDelta(_ event: CallEvent) {
+        guard let payload = event.payload,
+              let data = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+
+        // Server sends delta in "delta" or "text" field
+        if let delta = json["delta"] as? String ?? json["text"] as? String {
+            currentAIResponse += delta
+        }
     }
 
     private func appendToUserTranscript(_ text: String) {

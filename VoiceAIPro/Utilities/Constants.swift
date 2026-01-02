@@ -5,7 +5,7 @@ enum Constants {
     // MARK: - App Info
 
     enum App {
-        static let name = "VoiceAI Pro"
+        static let name = "VoxAI"
         static let version = "1.0.0"
     }
 

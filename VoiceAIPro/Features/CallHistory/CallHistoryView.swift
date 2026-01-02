@@ -283,9 +283,6 @@ struct CallHistoryRow: View {
     }
 }
 
-// Make CallRecord identifiable for sheet binding
-extension CallRecord: Identifiable {}
-
 #Preview {
     CallHistoryView()
         .modelContainer(for: [CallRecord.self, FavoriteContact.self], inMemory: true)

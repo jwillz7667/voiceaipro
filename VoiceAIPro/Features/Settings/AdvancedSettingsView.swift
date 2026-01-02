@@ -310,7 +310,7 @@ struct TranscriptionRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Image(systemName: model == .whisper1 ? "hare.fill" : "brain.head.profile")
+                Image(systemName: model == .gpt4oMiniTranscribe ? "hare.fill" : "brain.head.profile")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.blue)
                     .frame(width: 28)
