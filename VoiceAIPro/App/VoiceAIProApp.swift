@@ -21,7 +21,8 @@ struct VoiceAIProApp: App {
             EventLogEntry.self,
             TranscriptEntry.self,
             RecordingMetadata.self,
-            UserSettings.self
+            UserSettings.self,
+            FavoriteContact.self
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

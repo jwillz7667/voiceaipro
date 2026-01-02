@@ -312,20 +312,17 @@ function sendSessionConfig(session) {
 
 /**
  * Build OpenAI session configuration from our config format
- * Maps our configuration schema to OpenAI's expected format
+ * Maps our configuration schema to OpenAI's gpt-realtime GA format
+ * See: https://platform.openai.com/docs/api-reference/realtime
  */
 function buildSessionConfig(cfg) {
+  // GA gpt-realtime schema
   const sessionConfig = {
-    modalities: ['text', 'audio'],
-    instructions: cfg.instructions || getDefaultInstructions(),
-    voice: cfg.voice || 'marin',
-    input_audio_format: 'g711_ulaw',
-    output_audio_format: 'g711_ulaw',
+    type: 'realtime',
     input_audio_transcription: {
       model: cfg.transcriptionModel || 'gpt-4o-transcribe',
     },
-    temperature: cfg.temperature || 0.8,
-    max_response_output_tokens: cfg.maxOutputTokens || 4096,
+    instructions: cfg.instructions || getDefaultInstructions(),
   };
 
   // Configure turn detection (VAD)
@@ -346,7 +343,6 @@ function buildSessionConfig(cfg) {
       interrupt_response: cfg.vadConfig?.interruptResponse !== false,
     };
   } else {
-    // Disabled - we handle turn detection manually
     sessionConfig.turn_detection = null;
   }
 
