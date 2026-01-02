@@ -328,11 +328,14 @@ class EventProcessor: ObservableObject {
 
     private func handleServerUserTranscript(_ event: CallEvent) {
         guard let payload = event.payload,
-              let data = payload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+              let payloadData = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else { return }
 
-        // Server sends transcript in "text" or "content" field
-        if let transcript = json["text"] as? String ?? json["content"] as? String {
+        // Server wraps data in "data" field: { type, callSid, timestamp, data: { text, itemId } }
+        let dataDict = json["data"] as? [String: Any]
+
+        // Try data.text first, then fall back to top-level text for backwards compatibility
+        if let transcript = dataDict?["text"] as? String ?? dataDict?["content"] as? String ?? json["text"] as? String ?? json["content"] as? String {
             currentUserSpeech = transcript
             appendToUserTranscript(transcript)
         }
@@ -340,11 +343,14 @@ class EventProcessor: ObservableObject {
 
     private func handleServerAssistantTranscript(_ event: CallEvent) {
         guard let payload = event.payload,
-              let data = payload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+              let payloadData = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else { return }
 
-        // Server sends transcript in "text" or "content" field
-        if let transcript = json["text"] as? String ?? json["content"] as? String {
+        // Server wraps data in "data" field: { type, callSid, timestamp, data: { text, responseId } }
+        let dataDict = json["data"] as? [String: Any]
+
+        // Try data.text first, then fall back to top-level text for backwards compatibility
+        if let transcript = dataDict?["text"] as? String ?? dataDict?["content"] as? String ?? json["text"] as? String ?? json["content"] as? String {
             appendToAITranscript(transcript)
             currentAIResponse = ""  // Clear streaming response since we have final
         }
@@ -352,11 +358,14 @@ class EventProcessor: ObservableObject {
 
     private func handleServerAssistantDelta(_ event: CallEvent) {
         guard let payload = event.payload,
-              let data = payload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+              let payloadData = payload.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else { return }
 
-        // Server sends delta in "delta" or "text" field
-        if let delta = json["delta"] as? String ?? json["text"] as? String {
+        // Server wraps data in "data" field: { type, callSid, timestamp, data: { delta, accumulated } }
+        let dataDict = json["data"] as? [String: Any]
+
+        // Try data.delta first, then fall back to top-level delta for backwards compatibility
+        if let delta = dataDict?["delta"] as? String ?? dataDict?["text"] as? String ?? json["delta"] as? String ?? json["text"] as? String {
             currentAIResponse += delta
         }
     }
