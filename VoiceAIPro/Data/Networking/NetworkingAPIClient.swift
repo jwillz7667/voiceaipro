@@ -318,8 +318,6 @@ enum Endpoint {
 
     var body: Encodable? {
         switch self {
-        case .createPrompt(let prompt, _):
-            return prompt
         case .updatePrompt(let prompt):
             return prompt
         default:
@@ -341,6 +339,17 @@ enum Endpoint {
                 body["prompt_id"] = promptId.uuidString
             }
             return body
+        case .createPrompt(let prompt, let deviceId):
+            // Include user_id (device_id) in the request for server-side storage
+            return [
+                "id": prompt.id.uuidString,
+                "user_id": deviceId,
+                "name": prompt.name,
+                "instructions": prompt.instructions,
+                "voice": prompt.voice.rawValue,
+                "vad_config": prompt.vadConfig.toAPIParams(),
+                "is_default": prompt.isDefault
+            ]
         case .setDefaultPrompt(_, let deviceId):
             return ["device_id": deviceId]
         default:

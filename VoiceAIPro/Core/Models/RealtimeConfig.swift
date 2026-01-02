@@ -180,6 +180,34 @@ enum VADConfig: Codable, Equatable {
         case .disabled: return "Manual push-to-talk mode"
         }
     }
+
+    /// Convert to API-compatible dictionary format
+    func toAPIParams() -> [String: Any] {
+        switch self {
+        case .serverVAD(let params):
+            var result: [String: Any] = [
+                "type": "server_vad",
+                "threshold": params.threshold,
+                "prefix_padding_ms": params.prefixPaddingMs,
+                "silence_duration_ms": params.silenceDurationMs,
+                "create_response": params.createResponse,
+                "interrupt_response": params.interruptResponse
+            ]
+            if let idleTimeout = params.idleTimeoutMs {
+                result["idle_timeout_ms"] = idleTimeout
+            }
+            return result
+        case .semanticVAD(let params):
+            return [
+                "type": "semantic_vad",
+                "eagerness": params.eagerness.rawValue,
+                "create_response": params.createResponse,
+                "interrupt_response": params.interruptResponse
+            ]
+        case .disabled:
+            return ["type": "disabled"]
+        }
+    }
 }
 
 // MARK: - ServerVADParams
