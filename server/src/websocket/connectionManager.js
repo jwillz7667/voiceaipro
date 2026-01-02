@@ -248,6 +248,22 @@ class ConnectionManager {
     const session = new CallSession(callSid, options);
     this.sessions.set(callSid, session);
 
+    // Transfer any pending event subscribers that connected before session was created
+    const pendingSubscribers = this.eventSubscribers.get(callSid);
+    if (pendingSubscribers && pendingSubscribers.size > 0) {
+      logger.info('Transferring pending event subscribers to session', {
+        callSid,
+        count: pendingSubscribers.size,
+      });
+      pendingSubscribers.forEach((ws) => {
+        if (ws.readyState === 1) {
+          session.addEventSubscriber(ws);
+        }
+      });
+      // Clear from pending since they're now on the session
+      this.eventSubscribers.delete(callSid);
+    }
+
     logger.info('Session created', {
       callSid,
       sessionId: session.id,
