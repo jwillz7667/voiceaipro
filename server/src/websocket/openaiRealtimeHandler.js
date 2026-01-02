@@ -931,14 +931,22 @@ export function clearAudioBuffer(session) {
 export function cancelResponse(session) {
   const state = sessionStates.get(session.callSid);
 
+  // Only send cancel if there's actually an active response
+  if (!state || (!state.isResponding && !state.currentResponseId)) {
+    logger.debug('No active response to cancel', {
+      callSid: session.callSid,
+      isResponding: state?.isResponding,
+      currentResponseId: state?.currentResponseId,
+    });
+    return;
+  }
+
   session.sendToOpenAI({
     type: 'response.cancel',
   });
 
-  if (state) {
-    state.isResponding = false;
-    state.isPlayingAudio = false;
-  }
+  state.isResponding = false;
+  state.isPlayingAudio = false;
 
   logger.info('Response cancelled', { callSid: session.callSid });
 }
