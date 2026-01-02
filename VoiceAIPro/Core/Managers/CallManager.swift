@@ -171,6 +171,14 @@ class CallManager: ObservableObject {
     }
 
     private func setupBindings() {
+        // Bind Twilio service registration state to AppState
+        twilioService.$isRegistered
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] registered in
+                self?.appState?.updateTwilioRegistration(registered)
+            }
+            .store(in: &cancellables)
+
         // Bind Twilio service mute state
         twilioService.$isMuted
             .receive(on: DispatchQueue.main)
@@ -191,11 +199,24 @@ class CallManager: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Bind WebSocket connection state
+        // Bind WebSocket connection state to AppState
         webSocketService.$connectionState
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.webSocketState = state
+                // Map to AppState connection state
+                switch state {
+                case .disconnected:
+                    self?.appState?.updateConnectionState(.disconnected)
+                case .connecting:
+                    self?.appState?.updateConnectionState(.connecting)
+                case .connected:
+                    self?.appState?.updateConnectionState(.connected)
+                case .reconnecting:
+                    self?.appState?.updateConnectionState(.reconnecting)
+                case .error(let msg):
+                    self?.appState?.updateConnectionState(.error(msg))
+                }
             }
             .store(in: &cancellables)
     }

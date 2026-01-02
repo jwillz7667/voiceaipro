@@ -152,6 +152,10 @@ class TwilioVoiceService: NSObject, ObservableObject {
         // Fetch initial access token
         accessToken = try await fetchAccessToken()
 
+        // Mark as registered once we have a valid token
+        // (Full push notification registration happens separately)
+        isRegistered = true
+
         // Configure logging in debug mode
         #if DEBUG
         // TwilioVoiceSDK.setLogLevel(.debug, module: .core)
