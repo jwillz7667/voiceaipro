@@ -58,6 +58,7 @@ class OpenAISessionState {
     this.currentResponseId = null;
     this.isResponding = false;
     this.isPlayingAudio = false;
+    this.cancelledResponseId = null; // Track which response we've already cancelled
 
     // Transcript accumulation
     this.currentTranscriptDelta = '';
@@ -79,6 +80,7 @@ class OpenAISessionState {
     this.currentResponseId = null;
     this.isResponding = false;
     this.isPlayingAudio = false;
+    this.cancelledResponseId = null;
     this.currentTranscriptDelta = '';
   }
 
@@ -638,6 +640,7 @@ function handleResponseCreated(session, message, state) {
 
   state.currentResponseId = responseId;
   state.isResponding = true;
+  state.cancelledResponseId = null; // Reset so we can cancel this new response
   state.responsesGenerated++;
   state.currentTranscriptDelta = '';
 
@@ -941,6 +944,18 @@ export function cancelResponse(session) {
     return;
   }
 
+  // Prevent duplicate cancel requests for the same response
+  if (state.currentResponseId && state.cancelledResponseId === state.currentResponseId) {
+    logger.debug('Already cancelled this response', {
+      callSid: session.callSid,
+      responseId: state.currentResponseId,
+    });
+    return;
+  }
+
+  // Mark this response as cancelled before sending
+  state.cancelledResponseId = state.currentResponseId;
+
   session.sendToOpenAI({
     type: 'response.cancel',
   });
@@ -948,7 +963,10 @@ export function cancelResponse(session) {
   state.isResponding = false;
   state.isPlayingAudio = false;
 
-  logger.info('Response cancelled', { callSid: session.callSid });
+  logger.info('Response cancelled', {
+    callSid: session.callSid,
+    responseId: state.currentResponseId,
+  });
 }
 
 /**
