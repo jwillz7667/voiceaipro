@@ -172,7 +172,11 @@ class WebSocketService: ObservableObject {
 
     /// Connect to event stream for a specific call
     func connectEventStream(callId: String) async throws {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.WebSocket.events)/\(callId)") else {
+        let urlString = "\(baseURL)\(Constants.API.WebSocket.events)/\(callId)"
+        print("[WebSocketService] Connecting event stream to: \(urlString)")
+
+        guard let url = URL(string: urlString) else {
+            print("[WebSocketService] Invalid event stream URL")
             throw WebSocketError.invalidURL
         }
 
@@ -181,11 +185,13 @@ class WebSocketService: ObservableObject {
         do {
             try await eventClient?.connect()
             isEventConnected = true
+            print("[WebSocketService] Event stream connected successfully")
 
             // Start receiving events
             startEventReceiving()
 
         } catch {
+            print("[WebSocketService] Event stream connection failed: \(error)")
             lastError = error
             throw error
         }
@@ -308,17 +314,31 @@ class WebSocketService: ObservableObject {
     }
 
     private func handleEventMessage(_ message: WebSocketMessage) {
-        guard let json = message.jsonValue else { return }
+        print("[WebSocketService] Event received: \(message.stringValue ?? "nil")")
+
+        guard let json = message.jsonValue else {
+            print("[WebSocketService] Failed to parse event as JSON")
+            return
+        }
 
         // Extract event type
-        guard let typeString = json["type"] as? String,
-              let eventType = EventType(rawValue: typeString) else { return }
+        guard let typeString = json["type"] as? String else {
+            print("[WebSocketService] Event missing 'type' field")
+            return
+        }
 
-        // Parse event
+        guard let eventType = EventType(rawValue: typeString) else {
+            print("[WebSocketService] Unknown event type: \(typeString)")
+            return
+        }
+
+        print("[WebSocketService] Processing event: \(eventType.displayName)")
+
+        // Parse event - server sends "callSid" not "call_id"
         let event = CallEvent(
             id: UUID(),
             timestamp: Date(),
-            callId: json["call_id"] as? String ?? "",
+            callId: json["callSid"] as? String ?? json["call_id"] as? String ?? "",
             eventType: eventType,
             direction: .incoming,
             payload: message.stringValue

@@ -327,17 +327,36 @@ class EventProcessor: ObservableObject {
     // MARK: - Server Bridge Event Handlers
 
     private func handleServerUserTranscript(_ event: CallEvent) {
-        guard let payload = event.payload,
-              let payloadData = payload.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else { return }
+        print("[EventProcessor] handleServerUserTranscript called")
+
+        guard let payload = event.payload else {
+            print("[EventProcessor] No payload in user transcript event")
+            return
+        }
+
+        guard let payloadData = payload.data(using: .utf8) else {
+            print("[EventProcessor] Failed to convert payload to data")
+            return
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else {
+            print("[EventProcessor] Failed to parse payload JSON")
+            return
+        }
+
+        print("[EventProcessor] User transcript JSON keys: \(json.keys)")
 
         // Server wraps data in "data" field: { type, callSid, timestamp, data: { text, itemId } }
         let dataDict = json["data"] as? [String: Any]
+        print("[EventProcessor] Data dict: \(String(describing: dataDict))")
 
         // Try data.text first, then fall back to top-level text for backwards compatibility
         if let transcript = dataDict?["text"] as? String ?? dataDict?["content"] as? String ?? json["text"] as? String ?? json["content"] as? String {
+            print("[EventProcessor] User transcript: \(transcript)")
             currentUserSpeech = transcript
             appendToUserTranscript(transcript)
+        } else {
+            print("[EventProcessor] No text found in user transcript event")
         }
     }
 

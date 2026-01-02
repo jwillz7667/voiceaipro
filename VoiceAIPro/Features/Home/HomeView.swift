@@ -79,7 +79,12 @@ struct HomeView: View {
 
         Task {
             do {
-                try await container.callManager.startCall(to: cleanNumber)
+                // Pass the current config and selected prompt to the call
+                try await container.callManager.startCall(
+                    to: cleanNumber,
+                    config: appState.realtimeConfig,
+                    promptId: appState.selectedPrompt?.id
+                )
                 // Clear phone number after successful call initiation
                 phoneNumber = ""
             } catch {

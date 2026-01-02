@@ -12,6 +12,9 @@ class AppState: ObservableObject {
     /// Data manager for SwiftData operations
     private weak var dataManager: DataManager?
 
+    /// Combine subscriptions
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Call State
 
     /// Currently active call session
@@ -80,6 +83,16 @@ class AppState: ObservableObject {
     init() {
         // Load saved configuration from UserDefaults initially
         loadSavedConfig()
+
+        // Auto-save when realtimeConfig changes
+        $realtimeConfig
+            .dropFirst()  // Skip initial value
+            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                print("[AppState] Config changed, saving...")
+                self?.saveConfig()
+            }
+            .store(in: &cancellables)
     }
 
     /// Set data manager for SwiftData operations
