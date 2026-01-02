@@ -49,9 +49,10 @@ class DIContainer: ObservableObject {
     // MARK: - Initialization
 
     private init() {
-        // Initialize with default implementations
-        setupDefaultServices()
+        // Load device ID first (needed for API client)
         loadDeviceId()
+        // Then initialize services with the device ID
+        setupDefaultServices()
     }
 
     /// Initialize with model container and app state (called from App)
