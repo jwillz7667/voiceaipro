@@ -53,6 +53,11 @@ export function handleIOSClientConnection(ws, request) {
     const { type, payload } = message;
 
     switch (type) {
+      case 'handshake':
+        // iOS app sends handshake with device_id, client_type, version directly in message
+        handleHandshake(ws, message, context);
+        break;
+
       case 'auth':
         handleAuth(ws, payload, context);
         break;
@@ -66,7 +71,8 @@ export function handleIOSClientConnection(ws, request) {
         break;
 
       case 'session.update':
-        handleSessionUpdate(ws, payload, context);
+      case 'session.config':
+        handleSessionUpdate(ws, payload || message.config, context);
         break;
 
       case 'call.interrupt':
@@ -105,6 +111,36 @@ export function handleIOSClientConnection(ws, request) {
         logger.warn('Unknown iOS client message type', { type });
         sendError(ws, 'UNKNOWN_TYPE', `Unknown message type: ${type}`);
     }
+  }
+
+  function handleHandshake(ws, message, context) {
+    // iOS sends: { type: "handshake", device_id: "...", client_type: "ios", version: "..." }
+    const { device_id, client_type, version } = message;
+
+    if (!device_id) {
+      sendError(ws, 'HANDSHAKE_FAILED', 'Missing device_id');
+      return;
+    }
+
+    deviceId = device_id;
+    context.deviceId = device_id;
+    authenticatedAt = new Date();
+    context.authenticatedAt = authenticatedAt;
+
+    connectionManager.registerIOSClient(deviceId, ws);
+
+    sendMessage(ws, 'handshake.ack', {
+      device_id: deviceId,
+      client_type: client_type || 'ios',
+      version: version || 'unknown',
+      server_time: authenticatedAt.toISOString(),
+    });
+
+    logger.info('iOS client handshake completed', {
+      deviceId,
+      clientType: client_type,
+      version,
+    });
   }
 
   function handleAuth(ws, payload, context) {

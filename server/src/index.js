@@ -33,7 +33,9 @@ try {
 const app = express();
 const server = createServer(app);
 
-app.set('trust proxy', config.server.trustProxy ? 1 : false);
+const trustProxyValue = config.server.trustProxy ? 1 : false;
+appLogger.info('Setting trust proxy', { trustProxy: trustProxyValue, nodeEnv: config.nodeEnv });
+app.set('trust proxy', trustProxyValue);
 
 app.use(helmet({
   contentSecurityPolicy: false,
