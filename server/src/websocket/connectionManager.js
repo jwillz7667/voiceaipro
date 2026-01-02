@@ -143,7 +143,7 @@ class CallSession {
       }
     }
 
-    // Send to all event stream subscribers
+    // Send to all event stream subscribers on this session
     this.eventSubscribers.forEach((ws) => {
       if (ws.readyState === 1) {
         try {
@@ -153,6 +153,21 @@ class CallSession {
         }
       }
     });
+
+    // Also check connectionManager's pending subscribers (fallback for race conditions)
+    // connectionManager is the singleton defined at the bottom of this file
+    const pendingSubscribers = connectionManager?.eventSubscribers?.get(this.callSid);
+    if (pendingSubscribers) {
+      pendingSubscribers.forEach((ws) => {
+        if (ws.readyState === 1 && !this.eventSubscribers.has(ws)) {
+          try {
+            ws.send(message);
+          } catch (error) {
+            logger.error('Failed to send to pending subscriber', { callSid: this.callSid, error });
+          }
+        }
+      });
+    }
 
     return event;
   }
