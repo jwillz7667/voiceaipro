@@ -68,7 +68,10 @@ const config = {
     corsOrigins: requireEnv('CORS_ORIGINS', '*').split(',').map(s => s.trim()),
     rateLimitWindowMs: requireEnvInt('RATE_LIMIT_WINDOW_MS', 60000),
     rateLimitMax: requireEnvInt('RATE_LIMIT_MAX', 100),
-    trustProxy: requireEnvBool('TRUST_PROXY', false),
+    // Default to true in production (Railway, etc. use proxies)
+    trustProxy: process.env.TRUST_PROXY !== undefined
+      ? requireEnvBool('TRUST_PROXY', true)
+      : process.env.NODE_ENV === 'production',
   },
 
   logging: {
