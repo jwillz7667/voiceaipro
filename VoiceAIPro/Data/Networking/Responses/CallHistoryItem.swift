@@ -89,4 +89,48 @@ struct CallHistoryItem: Codable, Identifiable {
             config: .default
         )
     }
+
+    /// Initialize from server response dictionary
+    init?(from dict: [String: Any]) {
+        // Required fields
+        guard let idString = dict["id"] as? String,
+              let id = UUID(uuidString: idString),
+              let callSid = dict["call_sid"] as? String,
+              let direction = dict["direction"] as? String,
+              let phoneNumber = dict["phone_number"] as? String,
+              let status = dict["status"] as? String,
+              let startedAtString = dict["started_at"] as? String else {
+            return nil
+        }
+
+        // Parse date
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        guard let startedAt = formatter.date(from: startedAtString) else {
+            return nil
+        }
+
+        self.id = id
+        self.callSid = callSid
+        self.direction = direction
+        self.phoneNumber = phoneNumber
+        self.status = status
+        self.startedAt = startedAt
+
+        // Optional fields
+        if let endedAtString = dict["ended_at"] as? String {
+            self.endedAt = formatter.date(from: endedAtString)
+        } else {
+            self.endedAt = nil
+        }
+
+        self.durationSeconds = dict["duration_seconds"] as? Int
+        self.hasRecording = dict["has_recording"] as? Bool
+        if let recordingIdString = dict["recording_id"] as? String {
+            self.recordingId = UUID(uuidString: recordingIdString)
+        } else {
+            self.recordingId = nil
+        }
+        self.promptName = dict["prompt_name"] as? String
+    }
 }

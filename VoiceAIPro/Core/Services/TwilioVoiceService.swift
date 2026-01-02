@@ -3,57 +3,7 @@ import Combine
 import CallKit
 import AVFoundation
 import PushKit
-
-// MARK: - TwilioVoice Protocol Abstractions
-// These protocols mirror the TwilioVoice SDK types for compilation without the SDK
-
-/// Protocol representing a Twilio Voice call
-protocol TVOCallProtocol: AnyObject {
-    var uuid: UUID { get }
-    var sid: String? { get }
-    var state: TVOCallState { get }
-    var isMuted: Bool { get set }
-    var isOnHold: Bool { get set }
-
-    func disconnect()
-    func sendDigits(_ digits: String)
-}
-
-/// Protocol representing a call invite
-protocol TVOCallInviteProtocol: AnyObject {
-    var uuid: UUID { get }
-    var callSid: String { get }
-    var from: String { get }
-    var to: String { get }
-
-    func accept(with delegate: Any) -> TVOCallProtocol
-    func reject()
-}
-
-/// Protocol representing a cancelled call invite
-protocol TVOCancelledCallInviteProtocol: AnyObject {
-    var callSid: String { get }
-}
-
-/// Call states matching Twilio SDK
-enum TVOCallState: Int {
-    case connecting = 0
-    case ringing = 1
-    case connected = 2
-    case reconnecting = 3
-    case disconnected = 4
-}
-
-/// Call quality warnings
-struct TVOCallQualityWarning: OptionSet {
-    let rawValue: Int
-
-    static let highRtt = TVOCallQualityWarning(rawValue: 1 << 0)
-    static let highJitter = TVOCallQualityWarning(rawValue: 1 << 1)
-    static let highPacketLoss = TVOCallQualityWarning(rawValue: 1 << 2)
-    static let lowMos = TVOCallQualityWarning(rawValue: 1 << 3)
-    static let constantAudioInputLevel = TVOCallQualityWarning(rawValue: 1 << 4)
-}
+import TwilioVoice
 
 // MARK: - TwilioVoiceService
 
@@ -67,13 +17,13 @@ class TwilioVoiceService: NSObject, ObservableObject {
     @Published private(set) var isRegistered: Bool = false
 
     /// Current active call
-    @Published private(set) var activeCall: TVOCallProtocol?
+    @Published private(set) var activeCall: Call?
 
     /// Pending incoming call invite
-    @Published private(set) var callInvite: TVOCallInviteProtocol?
+    @Published private(set) var callInvite: CallInvite?
 
     /// Current call state
-    @Published private(set) var callState: TVOCallState = .disconnected
+    @Published private(set) var callState: Call.State = .disconnected
 
     /// Whether call is muted
     @Published var isMuted: Bool = false {
@@ -90,7 +40,7 @@ class TwilioVoiceService: NSObject, ObservableObject {
     }
 
     /// Call quality warnings
-    @Published private(set) var qualityWarnings: TVOCallQualityWarning = []
+    @Published private(set) var qualityWarnings: Set<Call.QualityWarning> = []
 
     /// Last error
     @Published private(set) var lastError: Error?
@@ -118,19 +68,22 @@ class TwilioVoiceService: NSObject, ObservableObject {
     /// Cancellables for Combine
     private var cancellables = Set<AnyCancellable>()
 
+    /// Cancelled call invites
+    private var cancelledCallInvites: [CancelledCallInvite] = []
+
     // MARK: - Callbacks
 
     /// Called when call connects
-    var onCallConnected: ((TVOCallProtocol) -> Void)?
+    var onCallConnected: ((Call) -> Void)?
 
     /// Called when call disconnects
-    var onCallDisconnected: ((TVOCallProtocol?, Error?) -> Void)?
+    var onCallDisconnected: ((Call?, Error?) -> Void)?
 
     /// Called when incoming call received
-    var onIncomingCall: ((TVOCallInviteProtocol) -> Void)?
+    var onIncomingCall: ((CallInvite) -> Void)?
 
     /// Called on quality warning
-    var onQualityWarning: ((TVOCallQualityWarning) -> Void)?
+    var onQualityWarning: ((Set<Call.QualityWarning>) -> Void)?
 
     // MARK: - Initialization
 
@@ -161,13 +114,12 @@ class TwilioVoiceService: NSObject, ObservableObject {
         }
 
         // Mark as registered once we have a valid token
-        // (Full push notification registration happens separately)
         isRegistered = true
         print("[TwilioVoiceService] isRegistered set to true")
 
         // Configure logging in debug mode
         #if DEBUG
-        // TwilioVoiceSDK.setLogLevel(.debug, module: .core)
+        TwilioVoiceSDK.setLogLevel(.debug, module: .core)
         #endif
     }
 
@@ -180,30 +132,32 @@ class TwilioVoiceService: NSObject, ObservableObject {
             return
         }
 
-        // In real implementation:
-        // TwilioVoiceSDK.register(accessToken: token, deviceToken: deviceToken) { error in
-        //     if let error = error {
-        //         self.lastError = error
-        //         self.isRegistered = false
-        //     } else {
-        //         self.isRegistered = true
-        //     }
-        // }
-
-        // Simulated registration
-        isRegistered = true
+        TwilioVoiceSDK.register(accessToken: token, deviceToken: deviceToken) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("[TwilioVoiceService] Push registration failed: \(error)")
+                    self?.lastError = error
+                    self?.isRegistered = false
+                } else {
+                    print("[TwilioVoiceService] Push registration successful")
+                    self?.isRegistered = true
+                }
+            }
+        }
     }
 
     /// Unregister from push notifications
     func unregister() {
         guard let token = accessToken, let deviceToken = deviceToken else { return }
 
-        // In real implementation:
-        // TwilioVoiceSDK.unregister(accessToken: token, deviceToken: deviceToken) { error in
-        //     self.isRegistered = false
-        // }
-
-        isRegistered = false
+        TwilioVoiceSDK.unregister(accessToken: token, deviceToken: deviceToken) { [weak self] error in
+            DispatchQueue.main.async {
+                if let error = error {
+                    print("[TwilioVoiceService] Unregister failed: \(error)")
+                }
+                self?.isRegistered = false
+            }
+        }
     }
 
     // MARK: - Call Management
@@ -213,7 +167,7 @@ class TwilioVoiceService: NSObject, ObservableObject {
     ///   - phoneNumber: The phone number to call
     ///   - params: Additional parameters for the call
     /// - Returns: The created call object
-    func makeCall(to phoneNumber: String, params: [String: String] = [:]) async throws -> TVOCallProtocol {
+    func makeCall(to phoneNumber: String, params: [String: String] = [:]) async throws -> Call {
         // Ensure we have a valid token
         try await refreshTokenIfNeeded()
 
@@ -229,18 +183,24 @@ class TwilioVoiceService: NSObject, ObservableObject {
         // Generate UUID for CallKit
         let callUUID = UUID()
 
-        // Report to CallKit
-        try await callKitManager?.startCall(uuid: callUUID, handle: phoneNumber)
+        // Report to CallKit (non-blocking - may fail without issue)
+        do {
+            try await callKitManager?.startCall(uuid: callUUID, handle: phoneNumber)
+        } catch {
+            // Log but don't fail - CallKit errors are not fatal
+            print("[TwilioVoiceService] CallKit startCall failed: \(error.localizedDescription)")
+            // Still report the call as outgoing for CallKit UI
+            callKitManager?.reportOutgoingCall(uuid: callUUID, handle: phoneNumber)
+        }
 
-        // In real implementation:
-        // let connectOptions = ConnectOptions(accessToken: token) { builder in
-        //     builder.params = connectParams
-        //     builder.uuid = callUUID
-        // }
-        // let call = TwilioVoiceSDK.connect(options: connectOptions, delegate: self)
+        // Create connect options
+        let connectOptions = ConnectOptions(accessToken: token) { builder in
+            builder.params = connectParams
+            builder.uuid = callUUID
+        }
 
-        // Create simulated call for now
-        let call = SimulatedTVOCall(uuid: callUUID, phoneNumber: phoneNumber)
+        // Connect the call
+        let call = TwilioVoiceSDK.connect(options: connectOptions, delegate: self)
         activeCall = call
         callState = .connecting
 
@@ -249,19 +209,18 @@ class TwilioVoiceService: NSObject, ObservableObject {
 
     /// Accept an incoming call
     /// - Returns: The accepted call object
-    func acceptIncomingCall() throws -> TVOCallProtocol {
+    func acceptIncomingCall() throws -> Call {
         guard let invite = callInvite else {
             throw TwilioError.noIncomingCall
         }
 
-        // In real implementation:
-        // let acceptOptions = AcceptOptions(callInvite: invite) { builder in
-        //     // Configure accept options
-        // }
-        // let call = invite.accept(with: acceptOptions, delegate: self)
+        // Create accept options
+        let acceptOptions = AcceptOptions(callInvite: invite) { builder in
+            // Configure accept options if needed
+        }
 
-        // Simulated acceptance
-        let call = invite.accept(with: self)
+        // Accept the call
+        let call = invite.accept(options: acceptOptions, delegate: self)
         activeCall = call
         callInvite = nil
         callState = .connected
@@ -329,131 +288,121 @@ class TwilioVoiceService: NSObject, ObservableObject {
     ///   - payload: The push payload
     ///   - completion: Completion handler
     func handlePushNotification(_ payload: [AnyHashable: Any], completion: @escaping () -> Void) {
-        // In real implementation:
-        // TwilioVoiceSDK.handleNotification(payload, delegate: self, delegateQueue: nil)
-
-        // Parse the payload and create call invite
-        if let callSid = payload["twi_call_sid"] as? String,
-           let from = payload["twi_from"] as? String,
-           let to = payload["twi_to"] as? String {
-
-            let invite = SimulatedCallInvite(
-                callSid: callSid,
-                from: from,
-                to: to
-            )
-
-            Task { @MainActor in
-                self.callInvite = invite
-                self.onIncomingCall?(invite)
-
-                // Report to CallKit
-                do {
-                    try await self.callKitManager?.reportIncomingCall(
-                        uuid: invite.uuid,
-                        handle: from
-                    )
-                } catch {
-                    self.lastError = error
-                }
-
-                completion()
-            }
-        } else {
-            completion()
-        }
+        TwilioVoiceSDK.handleNotification(payload, delegate: self, delegateQueue: nil)
+        completion()
     }
 
     /// Handle cancelled push notification
     func handleCancelledPushNotification(_ payload: [AnyHashable: Any]) {
-        if let callSid = payload["twi_call_sid"] as? String {
+        // Cancelled invites are handled by the delegate methods
+    }
+}
+
+// MARK: - CallDelegate
+
+extension TwilioVoiceService: CallDelegate {
+    nonisolated func callDidStartRinging(call: Call) {
+        Task { @MainActor in
+            callState = .ringing
+        }
+    }
+
+    nonisolated func callDidConnect(call: Call) {
+        Task { @MainActor in
+            callState = .connected
+            if let uuid = call.uuid {
+                callKitManager?.reportCallConnected(uuid: uuid)
+            }
+            onCallConnected?(call)
+        }
+    }
+
+    nonisolated func callDidFailToConnect(call: Call, error: any Error) {
+        Task { @MainActor in
+            lastError = error
+            callState = .disconnected
+            activeCall = nil
+
+            if let uuid = call.uuid {
+                callKitManager?.reportCallEnded(uuid: uuid, reason: .failed)
+            }
+            onCallDisconnected?(call, error)
+        }
+    }
+
+    nonisolated func callDidDisconnect(call: Call, error: (any Error)?) {
+        Task { @MainActor in
+            if let error = error {
+                lastError = error
+            }
+
+            callState = .disconnected
+            activeCall = nil
+            isMuted = false
+            qualityWarnings = []
+
+            let reason: CXCallEndedReason = error != nil ? .failed : .remoteEnded
+            if let uuid = call.uuid {
+                callKitManager?.reportCallEnded(uuid: uuid, reason: reason)
+            }
+            onCallDisconnected?(call, error)
+        }
+    }
+
+    nonisolated func callIsReconnecting(call: Call, error: any Error) {
+        Task { @MainActor in
+            callState = .reconnecting
+            lastError = error
+        }
+    }
+
+    nonisolated func callDidReconnect(call: Call) {
+        Task { @MainActor in
+            callState = .connected
+            lastError = nil
+        }
+    }
+
+    nonisolated func callDidReceiveQualityWarnings(call: Call, currentWarnings: Set<Call.QualityWarning>, previousWarnings: Set<Call.QualityWarning>) {
+        Task { @MainActor in
+            qualityWarnings = currentWarnings
+            onQualityWarning?(currentWarnings)
+        }
+    }
+}
+
+// MARK: - NotificationDelegate
+
+extension TwilioVoiceService: NotificationDelegate {
+    nonisolated func callInviteReceived(callInvite: CallInvite) {
+        Task { @MainActor in
+            self.callInvite = callInvite
+            onIncomingCall?(callInvite)
+
+            // Report to CallKit
+            do {
+                try await callKitManager?.reportIncomingCall(
+                    uuid: callInvite.uuid,
+                    handle: callInvite.from ?? "Unknown"
+                )
+            } catch {
+                lastError = error
+                print("[TwilioVoiceService] Failed to report incoming call: \(error)")
+            }
+        }
+    }
+
+    nonisolated func cancelledCallInviteReceived(cancelledCallInvite: CancelledCallInvite, error: any Error) {
+        Task { @MainActor in
+            cancelledCallInvites.append(cancelledCallInvite)
+
             // Find and cancel matching invite
-            if callInvite?.callSid == callSid {
+            if callInvite?.callSid == cancelledCallInvite.callSid {
                 if let uuid = callInvite?.uuid {
                     callKitManager?.reportCallEnded(uuid: uuid, reason: .remoteEnded)
                 }
                 callInvite = nil
             }
-        }
-    }
-}
-
-// MARK: - TVOCallDelegate Simulation
-
-extension TwilioVoiceService {
-    /// Called when call fails to connect
-    func call(_ call: TVOCallProtocol, didFailToConnectWithError error: Error) {
-        lastError = error
-        callState = .disconnected
-        activeCall = nil
-
-        callKitManager?.reportCallEnded(uuid: call.uuid, reason: .failed)
-        onCallDisconnected?(call, error)
-    }
-
-    /// Called when call starts ringing
-    func callDidStartRinging(_ call: TVOCallProtocol) {
-        callState = .ringing
-    }
-
-    /// Called when call connects
-    func callDidConnect(_ call: TVOCallProtocol) {
-        callState = .connected
-        callKitManager?.reportCallConnected(uuid: call.uuid)
-        onCallConnected?(call)
-    }
-
-    /// Called when call disconnects
-    func call(_ call: TVOCallProtocol, didDisconnectWithError error: Error?) {
-        if let error = error {
-            lastError = error
-        }
-
-        callState = .disconnected
-        activeCall = nil
-        isMuted = false
-        qualityWarnings = []
-
-        let reason: CXCallEndedReason = error != nil ? .failed : .remoteEnded
-        callKitManager?.reportCallEnded(uuid: call.uuid, reason: reason)
-        onCallDisconnected?(call, error)
-    }
-
-    /// Called when call is reconnecting
-    func call(_ call: TVOCallProtocol, isReconnectingWithError error: Error) {
-        callState = .reconnecting
-        lastError = error
-    }
-
-    /// Called when call reconnects
-    func callDidReconnect(_ call: TVOCallProtocol) {
-        callState = .connected
-        lastError = nil
-    }
-
-    /// Called when quality warnings change
-    func call(_ call: TVOCallProtocol, didReceiveQualityWarnings currentWarnings: TVOCallQualityWarning, previousWarnings: TVOCallQualityWarning) {
-        qualityWarnings = currentWarnings
-        onQualityWarning?(currentWarnings)
-    }
-}
-
-// MARK: - TVONotificationDelegate Simulation
-
-extension TwilioVoiceService {
-    /// Called when call invite is received
-    func callInviteReceived(_ callInvite: TVOCallInviteProtocol) {
-        self.callInvite = callInvite
-        onIncomingCall?(callInvite)
-    }
-
-    /// Called when call invite is cancelled
-    func cancelledCallInviteReceived(_ cancelledCallInvite: TVOCancelledCallInviteProtocol, error: Error?) {
-        if callInvite?.callSid == cancelledCallInvite.callSid {
-            if let uuid = callInvite?.uuid {
-                callKitManager?.reportCallEnded(uuid: uuid, reason: .remoteEnded)
-            }
-            callInvite = nil
         }
     }
 }
@@ -480,57 +429,5 @@ enum TwilioError: LocalizedError {
         case .tokenError:
             return "Failed to get access token"
         }
-    }
-}
-
-// MARK: - Simulated Call Types (Remove when using real SDK)
-
-/// Simulated call for development without TwilioVoice SDK
-class SimulatedTVOCall: TVOCallProtocol {
-    let uuid: UUID
-    var sid: String?
-    var state: TVOCallState = .connecting
-    var isMuted: Bool = false
-    var isOnHold: Bool = false
-
-    private let phoneNumber: String
-
-    init(uuid: UUID, phoneNumber: String) {
-        self.uuid = uuid
-        self.phoneNumber = phoneNumber
-        self.sid = "CA\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(32))"
-    }
-
-    func disconnect() {
-        state = .disconnected
-    }
-
-    func sendDigits(_ digits: String) {
-        // Simulated DTMF
-    }
-}
-
-/// Simulated call invite for development without TwilioVoice SDK
-class SimulatedCallInvite: TVOCallInviteProtocol {
-    let uuid: UUID
-    let callSid: String
-    let from: String
-    let to: String
-
-    init(callSid: String, from: String, to: String) {
-        self.uuid = UUID()
-        self.callSid = callSid
-        self.from = from
-        self.to = to
-    }
-
-    func accept(with delegate: Any) -> TVOCallProtocol {
-        let call = SimulatedTVOCall(uuid: uuid, phoneNumber: from)
-        call.state = .connected
-        return call
-    }
-
-    func reject() {
-        // Simulated rejection
     }
 }

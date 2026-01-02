@@ -19,6 +19,9 @@ class CallSession {
     this.iosWs = null;
     this.streamSid = null;
 
+    // Event stream subscribers for this session
+    this.eventSubscribers = new Set();
+
     this.config = {
       model: 'gpt-realtime',
       voice: 'marin',
@@ -131,6 +134,7 @@ class CallSession {
       data,
     });
 
+    // Send to iOS control channel
     if (this.iosWs && this.iosWs.readyState === 1) {
       try {
         this.iosWs.send(message);
@@ -139,7 +143,28 @@ class CallSession {
       }
     }
 
+    // Send to all event stream subscribers
+    this.eventSubscribers.forEach((ws) => {
+      if (ws.readyState === 1) {
+        try {
+          ws.send(message);
+        } catch (error) {
+          logger.error('Failed to send to event subscriber', { callSid: this.callSid, error });
+        }
+      }
+    });
+
     return event;
+  }
+
+  addEventSubscriber(ws) {
+    this.eventSubscribers.add(ws);
+    logger.debug('Event subscriber added to session', { callSid: this.callSid, count: this.eventSubscribers.size });
+  }
+
+  removeEventSubscriber(ws) {
+    this.eventSubscribers.delete(ws);
+    logger.debug('Event subscriber removed from session', { callSid: this.callSid, count: this.eventSubscribers.size });
   }
 
   sendToTwilio(message) {

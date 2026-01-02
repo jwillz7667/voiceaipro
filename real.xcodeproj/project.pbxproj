@@ -24,7 +24,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		2F08F1792F0620AD006B6313 /* real.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = real.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F08F1792F0620AD006B6313 /* real.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = real.app; path = VoxAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F08F18A2F0620AF006B6313 /* realTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = realTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F08F1942F0620AF006B6313 /* realUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = realUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -112,6 +112,7 @@
 			);
 			name = real;
 			packageProductDependencies = (
+				2F08F1B12F0620B0006B6313 /* TwilioVoice */,
 			);
 			productName = real;
 			productReference = 2F08F1792F0620AD006B6313 /* real.app */;
@@ -197,6 +198,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2F08F17A2F0620AD006B6313 /* Products */;
+			packageReferences = (
+				2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -268,6 +272,25 @@
 		};
 /* End PBXTargetDependency section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twilio/twilio-voice-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2F08F1B12F0620B0006B6313 /* TwilioVoice */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */;
+			productName = TwilioVoice;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 /* Begin XCBuildConfiguration section */
 		2F08F19E2F0620AF006B6313 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -280,16 +303,12 @@
 				DEVELOPMENT_TEAM = 487LC4H9U4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VoxAI;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = (
-					audio,
-					voip,
-					"remote-notification",
-				);
+				INFOPLIST_KEY_UIBackgroundModes = "audio voip remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_CFBundleDisplayName = VoxAI;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -319,16 +338,12 @@
 				DEVELOPMENT_TEAM = 487LC4H9U4;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = VoxAI;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UIBackgroundModes = (
-					audio,
-					voip,
-					"remote-notification",
-				);
+				INFOPLIST_KEY_UIBackgroundModes = "audio voip remote-notification";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_CFBundleDisplayName = VoxAI;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

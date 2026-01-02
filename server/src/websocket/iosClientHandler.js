@@ -422,18 +422,29 @@ export function handleEventStreamConnection(ws, request, callSid) {
       session: session.toJSON(),
     });
 
+    // Send recent events to catch up
     const recentEvents = session.events.slice(-50);
     recentEvents.forEach((event) => {
       sendMessage(ws, 'event', event);
     });
+
+    // Subscribe directly to session for real-time events
+    session.addEventSubscriber(ws);
+
+    ws.on('close', () => {
+      logger.info('Event stream connection closed', { callSid });
+      session.removeEventSubscriber(ws);
+      connectionManager.unsubscribeFromEvents(callSid, ws);
+    });
+  } else {
+    // No active session, still register for future events
+    connectionManager.subscribeToEvents(callSid, ws);
+
+    ws.on('close', () => {
+      logger.info('Event stream connection closed', { callSid });
+      connectionManager.unsubscribeFromEvents(callSid, ws);
+    });
   }
-
-  connectionManager.subscribeToEvents(callSid, ws);
-
-  ws.on('close', () => {
-    logger.info('Event stream connection closed', { callSid });
-    connectionManager.unsubscribeFromEvents(callSid, ws);
-  });
 
   ws.on('error', (error) => {
     logger.error('Event stream error', { callSid, error: error.message });

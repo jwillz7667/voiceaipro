@@ -50,16 +50,17 @@ router.get('/', async (req, res) => {
         call_sid: row.call_sid,
         phone_number: row.phone_number,
         direction: row.direction,
-        duration_seconds: row.duration_seconds,
-        file_size_bytes: row.file_size_bytes,
+        duration: row.duration_seconds,        // iOS expects 'duration'
+        file_size: row.file_size_bytes,        // iOS expects 'file_size'
         format: row.format,
+        sample_rate: 24000,                     // PCM16 sample rate
+        channels: 1,                            // Mono audio
+        has_transcript: false,                  // Placeholder for future
         created_at: row.created_at,
       })),
-      pagination: {
-        total: parseInt(countResult.rows[0].total),
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-      },
+      total: parseInt(countResult.rows[0].total),
+      limit: parseInt(limit),
+      offset: parseInt(offset),
     });
   } catch (error) {
     logger.error('Failed to list recordings', error);
@@ -104,9 +105,12 @@ router.get('/:id', async (req, res) => {
         call_sid: row.call_sid,
         phone_number: row.phone_number,
         direction: row.direction,
-        duration_seconds: row.duration_seconds,
-        file_size_bytes: row.file_size_bytes,
+        duration: row.duration_seconds,         // iOS expects 'duration'
+        file_size: row.file_size_bytes,         // iOS expects 'file_size'
         format: row.format,
+        sample_rate: 24000,                      // PCM16 sample rate
+        channels: 1,                             // Mono audio
+        has_transcript: false,                   // Placeholder for future
         created_at: row.created_at,
         call_started_at: row.started_at,
         call_ended_at: row.ended_at,

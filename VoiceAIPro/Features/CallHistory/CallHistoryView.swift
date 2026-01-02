@@ -5,10 +5,13 @@ import SwiftData
 struct CallHistoryView: View {
     @Query(sort: \CallRecord.startedAt, order: .reverse) private var calls: [CallRecord]
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var container: DIContainer
 
     @State private var searchText = ""
     @State private var selectedFilter: HistoryFilter = .all
     @State private var selectedCall: CallRecord?
+    @State private var isLoading = false
+    @State private var syncError: String?
 
     private var filteredCalls: [CallRecord] {
         var result = calls
@@ -108,7 +111,45 @@ struct CallHistoryView: View {
             .sheet(item: $selectedCall) { call in
                 CallDetailView(call: call)
             }
+            .task {
+                await syncCallHistory()
+            }
+            .refreshable {
+                await syncCallHistory()
+            }
+            .overlay {
+                if isLoading && calls.isEmpty {
+                    ProgressView("Loading history...")
+                }
+            }
         }
+    }
+
+    /// Sync call history from server to local SwiftData
+    private func syncCallHistory() async {
+        guard !isLoading else { return }
+        isLoading = true
+        syncError = nil
+
+        do {
+            let serverCalls = try await container.apiClient.getCallHistory(limit: 100, offset: 0)
+
+            // Convert server response to CallHistoryItem and sync
+            var historyItems: [CallHistoryItem] = []
+            for callData in serverCalls {
+                if let item = CallHistoryItem(from: callData) {
+                    historyItems.append(item)
+                }
+            }
+
+            // Sync to SwiftData
+            try await container.dataManager?.syncCallHistory(with: historyItems)
+
+        } catch {
+            syncError = error.localizedDescription
+        }
+
+        isLoading = false
     }
 
     private var groupedCalls: [Date: [CallRecord]] {

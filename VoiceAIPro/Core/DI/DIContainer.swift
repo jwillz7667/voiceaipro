@@ -66,6 +66,9 @@ class DIContainer: ObservableObject {
         dataManager = DataManager(container: modelContainer)
         dataManager?.loadInitialData()
 
+        // Connect AppState to DataManager for persistent settings
+        appState.setDataManager(dataManager)
+
         // Initialize call-related services
         setupCallServices(appState: appState)
     }

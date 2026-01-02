@@ -1,11 +1,17 @@
 import Foundation
 import Combine
 import SwiftUI
+import SwiftData
 
 /// Global application state accessible throughout the app
 /// Tracks current call, connection status, and configuration
 @MainActor
 class AppState: ObservableObject {
+    // MARK: - Dependencies
+
+    /// Data manager for SwiftData operations
+    private weak var dataManager: DataManager?
+
     // MARK: - Call State
 
     /// Currently active call session
@@ -72,8 +78,17 @@ class AppState: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        // Load saved configuration
+        // Load saved configuration from UserDefaults initially
         loadSavedConfig()
+    }
+
+    /// Set data manager for SwiftData operations
+    func setDataManager(_ manager: DataManager?) {
+        self.dataManager = manager
+        // Reload config from SwiftData if available
+        if let settings = manager?.getSettings() {
+            realtimeConfig = settings.defaultConfig
+        }
     }
 
     // MARK: - Call Management
@@ -255,8 +270,28 @@ class AppState: ObservableObject {
     }
 
     private func saveConfig() {
+        // Save to UserDefaults as fallback
         if let data = try? JSONEncoder().encode(realtimeConfig) {
             UserDefaults.standard.set(data, forKey: Constants.Persistence.lastConfigKey)
+        }
+
+        // Save to SwiftData for persistent storage
+        if let dataManager = dataManager {
+            let settings = dataManager.getSettings()
+            settings.setDefaultConfig(realtimeConfig)
+            settings.setDefaultVoice(realtimeConfig.voice)
+
+            // Determine VAD type from config enum
+            switch realtimeConfig.vadConfig {
+            case .serverVAD:
+                settings.defaultVADType = "server_vad"
+            case .semanticVAD:
+                settings.defaultVADType = "semantic_vad"
+            case .disabled:
+                settings.defaultVADType = "disabled"
+            }
+
+            try? dataManager.context.save()
         }
     }
 

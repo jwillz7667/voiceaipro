@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import CallKit
 import AVFoundation
+import TwilioVoice
 
 /// High-level call manager that orchestrates all call-related services
 /// Coordinates TwilioVoiceService, CallKitManager, AudioSessionManager, and AppState
@@ -327,11 +328,14 @@ class CallManager: ObservableObject {
             appState?.setActiveCall(session)
 
             // Start event processor
-            eventProcessor.startCall(callId: call.sid ?? session.id.uuidString)
+            let callId = call.sid ?? session.id.uuidString
+            eventProcessor.startCall(callId: callId)
 
-            // Connect event stream for real-time updates
-            if let callSid = call.sid {
-                try? await webSocketService.connectEventStream(callId: callSid)
+            // Connect event stream for real-time transcription updates
+            do {
+                try await webSocketService.connectEventStream(callId: callId)
+            } catch {
+                print("[CallManager] Failed to connect event stream for outbound call: \(error)")
             }
 
             // Send session config via WebSocket
@@ -414,12 +418,23 @@ class CallManager: ObservableObject {
 
             // Create session
             let session = CallSession.inbound(
-                from: invite.from,
+                from: invite.from ?? "Unknown",
                 callSid: call.sid
             )
             currentSession = session
             hasActiveCall = true
             appState?.setActiveCall(session)
+
+            // Start event processor for transcriptions
+            let callId = call.sid ?? session.id.uuidString
+            eventProcessor.startCall(callId: callId)
+
+            // Connect event stream for real-time transcription updates
+            do {
+                try await webSocketService.connectEventStream(callId: callId)
+            } catch {
+                print("[CallManager] Failed to connect event stream for inbound call: \(error)")
+            }
 
         } catch {
             callState = .error(error)
@@ -453,7 +468,7 @@ class CallManager: ObservableObject {
 
     // MARK: - Private Handlers
 
-    private func handleCallConnected(_ call: TVOCallProtocol) {
+    private func handleCallConnected(_ call: Call) {
         callState = .connected
         callStartTime = Date()
         startDurationTimer()
@@ -467,7 +482,7 @@ class CallManager: ObservableObject {
         }
     }
 
-    private func handleCallDisconnected(_ call: TVOCallProtocol?, error: Error?) {
+    private func handleCallDisconnected(_ call: Call?, error: Error?) {
         stopDurationTimer()
 
         if let error = error {
@@ -551,30 +566,21 @@ class CallManager: ObservableObject {
         }
     }
 
-    private func handleIncomingCall(_ invite: TVOCallInviteProtocol) {
+    private func handleIncomingCall(_ invite: CallInvite) {
         callState = .ringing
 
         // Create session for incoming call
         let session = CallSession.inbound(
-            from: invite.from,
+            from: invite.from ?? "Unknown",
             callSid: invite.callSid
         )
         currentSession = session
     }
 
-    private func handleQualityWarning(_ warnings: TVOCallQualityWarning) {
-        // Log quality warnings
-        if warnings.contains(.highRtt) {
-            print("[CallManager] Quality warning: High RTT")
-        }
-        if warnings.contains(.highJitter) {
-            print("[CallManager] Quality warning: High jitter")
-        }
-        if warnings.contains(.highPacketLoss) {
-            print("[CallManager] Quality warning: High packet loss")
-        }
-        if warnings.contains(.lowMos) {
-            print("[CallManager] Quality warning: Low MOS")
+    private func handleQualityWarning(_ warnings: Set<Call.QualityWarning>) {
+        // Log all quality warnings
+        for warning in warnings {
+            print("[CallManager] Quality warning: \(warning)")
         }
     }
 
