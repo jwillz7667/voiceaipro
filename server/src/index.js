@@ -5,7 +5,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
-import { parse as parseUrl } from 'url';
 
 import config, { validateEnvironment } from './config/environment.js';
 import logger, { requestLogger, createLogger } from './utils/logger.js';
@@ -33,7 +32,8 @@ try {
 const app = express();
 const server = createServer(app);
 
-const trustProxyValue = config.server.trustProxy ? 1 : false;
+// Trust proxy for Railway/cloud deployments (required for express-rate-limit with X-Forwarded-For)
+const trustProxyValue = config.server.trustProxy ? true : false;
 appLogger.info('Setting trust proxy', { trustProxy: trustProxyValue, nodeEnv: config.nodeEnv });
 app.set('trust proxy', trustProxyValue);
 
@@ -216,7 +216,9 @@ app.use((err, req, res, next) => {
 const wss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (request, socket, head) => {
-  const { pathname } = parseUrl(request.url, true);
+  // Use WHATWG URL API instead of deprecated url.parse()
+  const url = new URL(request.url, `http://${request.headers.host}`);
+  const pathname = url.pathname;
 
   appLogger.debug('WebSocket upgrade request', { pathname });
 
