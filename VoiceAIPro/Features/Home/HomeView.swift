@@ -172,6 +172,18 @@ struct EventLogRow: View {
         formatter.dateFormat = "HH:mm:ss.SSS"
         return formatter.string(from: event.timestamp)
     }
+
+    private var eventColor: Color {
+        switch event.eventType.category {
+        case .session: return .gray
+        case .audio: return .blue
+        case .transcript: return .green
+        case .response: return .purple
+        case .error: return .red
+        case .call: return .orange
+        case .other: return .secondary
+        }
+    }
 }
 
 #Preview {

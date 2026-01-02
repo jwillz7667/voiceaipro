@@ -217,10 +217,14 @@ extension View {
             let state = AppState()
             state.currentCall = CallSession(
                 id: UUID(),
-                phoneNumber: "5551234567",
+                callSid: nil,
                 direction: .outbound,
+                phoneNumber: "5551234567",
                 status: .connected,
                 startedAt: Date(),
+                endedAt: nil,
+                durationSeconds: nil,
+                promptId: nil,
                 config: .default
             )
             state.callStatus = .connected

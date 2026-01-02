@@ -297,9 +297,7 @@ function sendSessionConfig(session) {
 
   logger.info('Session config sent to OpenAI', {
     callSid: session.callSid,
-    voice: sessionConfig.voice,
     vadType: sessionConfig.turn_detection?.type || 'disabled',
-    transcriptionModel: sessionConfig.input_audio_transcription?.model,
     instructionsLength: sessionConfig.instructions?.length,
     fullConfig: JSON.stringify(sessionConfig),
   });
@@ -317,12 +315,9 @@ function sendSessionConfig(session) {
  */
 function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update schema
-  // Note: voice and audio formats are set via WebSocket URL params
+  // Voice and audio formats are set via WebSocket URL params
   const sessionConfig = {
     instructions: cfg.instructions || getDefaultInstructions(),
-    input_audio_transcription: {
-      model: cfg.transcriptionModel || 'gpt-4o-transcribe',
-    },
   };
 
   // Configure turn detection (VAD)
