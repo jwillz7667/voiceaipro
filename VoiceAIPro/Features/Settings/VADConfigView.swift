@@ -40,7 +40,7 @@ struct VADConfigView: View {
                             .font(.system(size: 16, weight: .medium))
 
                         GlassSegmentedPicker(
-                            options: Eagerness.allCases,
+                            options: SemanticVADParams.Eagerness.allCases,
                             selection: Binding(
                                 get: { params.eagerness },
                                 set: { newValue in
@@ -328,23 +328,6 @@ struct VADTypeRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-// MARK: - Eagerness Extension
-
-extension Eagerness {
-    var displayName: String {
-        rawValue.capitalized
-    }
-
-    var description: String {
-        switch self {
-        case .low: return "Waits longer for you to finish speaking"
-        case .medium: return "Balanced response timing"
-        case .high: return "Responds quickly to pauses"
-        case .auto: return "Automatically adjusts based on context"
-        }
     }
 }
 

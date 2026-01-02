@@ -156,8 +156,8 @@ struct EventLogRow: View {
                         .foregroundColor(.secondary)
                 }
 
-                if let description = event.eventDescription {
-                    Text(description)
+                if let payload = event.payload {
+                    Text(payload)
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
                         .lineLimit(2)

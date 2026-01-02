@@ -297,9 +297,7 @@ function sendSessionConfig(session) {
 
   logger.info('Session config sent to OpenAI', {
     callSid: session.callSid,
-    vadType: sessionConfig.turn_detection?.type || 'disabled',
     instructionsLength: sessionConfig.instructions?.length,
-    fullConfig: JSON.stringify(sessionConfig),
   });
 
   // Log to database
@@ -314,35 +312,12 @@ function sendSessionConfig(session) {
  * See: https://platform.openai.com/docs/api-reference/realtime
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime session.update schema
-  // Voice and audio formats are set via WebSocket URL params
-  const sessionConfig = {
+  // GA gpt-realtime session.update - only type and instructions
+  // Voice, audio format, and turn_detection are set via WebSocket URL params
+  return {
     type: 'realtime',
     instructions: cfg.instructions || getDefaultInstructions(),
   };
-
-  // Configure turn detection (VAD)
-  if (cfg.vadType === 'semantic_vad') {
-    sessionConfig.turn_detection = {
-      type: 'semantic_vad',
-      eagerness: cfg.vadConfig?.eagerness || 'medium',
-      create_response: cfg.vadConfig?.createResponse !== false,
-      interrupt_response: cfg.vadConfig?.interruptResponse !== false,
-    };
-  } else if (cfg.vadType === 'server_vad') {
-    sessionConfig.turn_detection = {
-      type: 'server_vad',
-      threshold: cfg.vadConfig?.threshold || 0.5,
-      prefix_padding_ms: cfg.vadConfig?.prefixPaddingMs || 300,
-      silence_duration_ms: cfg.vadConfig?.silenceDurationMs || 500,
-      create_response: cfg.vadConfig?.createResponse !== false,
-      interrupt_response: cfg.vadConfig?.interruptResponse !== false,
-    };
-  } else {
-    sessionConfig.turn_detection = null;
-  }
-
-  return sessionConfig;
 }
 
 /**

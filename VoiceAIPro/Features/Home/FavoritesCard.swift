@@ -179,8 +179,7 @@ struct AddFavoriteButton: View {
                 }
                 .overlay(
                     Circle()
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                        .stroke(style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                        .stroke(Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 )
 
                 Text("Add")

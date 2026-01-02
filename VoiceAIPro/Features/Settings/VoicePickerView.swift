@@ -109,7 +109,7 @@ struct VoiceRow: View {
                         }
                     }
 
-                    Text(voice.voiceDescription)
+                    Text(voice.description)
                         .font(.system(size: 13))
                         .foregroundColor(.secondary)
                 }
@@ -136,25 +136,6 @@ struct VoiceRow: View {
 // MARK: - Voice Extensions
 
 extension RealtimeVoice {
-    var displayName: String {
-        rawValue.capitalized
-    }
-
-    var voiceDescription: String {
-        switch self {
-        case .marin: return "Professional, clear - Best for assistants"
-        case .cedar: return "Natural, conversational - Best for support"
-        case .alloy: return "Neutral, balanced - General purpose"
-        case .echo: return "Warm, engaging - Customer service"
-        case .shimmer: return "Energetic, expressive - Sales"
-        case .ash: return "Confident, assertive - Business"
-        case .ballad: return "Storytelling tone - Narratives"
-        case .coral: return "Friendly, approachable - Casual"
-        case .sage: return "Wise, thoughtful - Advisory"
-        case .verse: return "Dramatic, expressive - Creative"
-        }
-    }
-
     var isRecommended: Bool {
         self == .marin || self == .cedar
     }
