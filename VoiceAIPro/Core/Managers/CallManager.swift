@@ -3,6 +3,7 @@ import Combine
 import CallKit
 import AVFoundation
 import TwilioVoice
+import SwiftData
 
 /// High-level call manager that orchestrates all call-related services
 /// Coordinates TwilioVoiceService, CallKitManager, AudioSessionManager, and AppState
@@ -538,7 +539,7 @@ class CallManager: ObservableObject {
         isSpeakerEnabled = false
     }
 
-    /// Save call record and transcripts to SwiftData
+    /// Save call record and transcripts to SwiftData, then fetch full details from server
     private func saveCallRecordAndTranscripts(session: CallSession) {
         guard let dataManager = dataManager else {
             print("[CallManager] DataManager not available, cannot save call record")
@@ -550,7 +551,14 @@ class CallManager: ObservableObject {
             try dataManager.saveCallRecord(session)
             print("[CallManager] Call record saved: \(session.id)")
 
-            // Save user transcript if available
+            // Save local events immediately
+            let events = eventProcessor.events
+            if !events.isEmpty, let callSid = session.callSid {
+                try dataManager.saveEvents(events, for: callSid)
+                print("[CallManager] \(events.count) local events saved")
+            }
+
+            // Save local transcripts as fallback (will be overwritten by server data)
             let userText = eventProcessor.userTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
             if !userText.isEmpty {
                 let userEntry = TranscriptEntry.user(
@@ -559,10 +567,9 @@ class CallManager: ObservableObject {
                     timestampMs: session.durationSeconds.map { $0 * 1000 }
                 )
                 try dataManager.saveTranscript(userEntry)
-                print("[CallManager] User transcript saved")
+                print("[CallManager] Local user transcript saved")
             }
 
-            // Save AI transcript if available
             let aiText = eventProcessor.aiTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
             if !aiText.isEmpty {
                 let aiEntry = TranscriptEntry.assistant(
@@ -571,17 +578,80 @@ class CallManager: ObservableObject {
                     timestampMs: session.durationSeconds.map { $0 * 1000 }
                 )
                 try dataManager.saveTranscript(aiEntry)
-                print("[CallManager] AI transcript saved")
-            }
-
-            // Save events
-            let events = eventProcessor.events
-            if !events.isEmpty, let callSid = session.callSid {
-                try dataManager.saveEvents(events, for: callSid)
-                print("[CallManager] \(events.count) events saved")
+                print("[CallManager] Local AI transcript saved")
             }
         } catch {
-            print("[CallManager] Failed to save call record: \(error)")
+            print("[CallManager] Failed to save local call record: \(error)")
+        }
+
+        // Fetch full call details from server after a short delay
+        // This ensures server has processed all data
+        if let callSid = session.callSid {
+            Task {
+                await fetchAndSaveServerCallData(callSid: callSid, sessionId: session.id)
+            }
+        }
+    }
+
+    /// Fetch full call details from server and save to SwiftData
+    private func fetchAndSaveServerCallData(callSid: String, sessionId: UUID) async {
+        // Wait for server to finish processing (transcripts, recordings)
+        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+
+        guard let dataManager = dataManager else {
+            print("[CallManager] DataManager not available for server data fetch")
+            return
+        }
+
+        do {
+            print("[CallManager] Fetching full call details from server for: \(callSid)")
+            let fullDetails = try await apiClient.getFullCallDetails(callSid: callSid)
+
+            // Save individual transcript entries from server
+            if let transcripts = fullDetails.transcripts, !transcripts.isEmpty {
+                print("[CallManager] Saving \(transcripts.count) transcript entries from server")
+                for serverTranscript in transcripts {
+                    let entry = serverTranscript.toTranscriptEntry(callSid: callSid)
+                    try dataManager.saveTranscript(entry)
+                }
+                print("[CallManager] Server transcripts saved successfully")
+            } else {
+                print("[CallManager] No transcripts received from server")
+            }
+
+            // Save recording metadata from server
+            if let recordings = fullDetails.recordings, !recordings.isEmpty {
+                print("[CallManager] Saving \(recordings.count) recording(s) from server")
+                for serverRecording in recordings {
+                    let metadata = serverRecording.toRecordingMetadata(callSessionId: sessionId)
+                    try dataManager.saveRecordingMetadataEntry(metadata)
+
+                    // Update call record with recording ID
+                    if var callRecord = dataManager.getCallRecord(callSid: callSid) {
+                        callRecord.recordingId = serverRecording.id
+                        try dataManager.context.save()
+                    }
+                }
+                print("[CallManager] Server recordings saved successfully")
+            } else {
+                print("[CallManager] No recordings received from server")
+            }
+
+            // Update call record with final status from server
+            if let callRecord = dataManager.getCallRecord(callSid: callSid) {
+                callRecord.status = fullDetails.call.status
+                callRecord.endedAt = fullDetails.call.endedAt
+                callRecord.durationSeconds = fullDetails.call.durationSeconds
+                callRecord.syncedAt = Date()
+                try dataManager.context.save()
+                print("[CallManager] Call record synced with server data")
+            }
+
+            print("[CallManager] ✅ Full call data synced from server")
+
+        } catch {
+            print("[CallManager] ⚠️ Failed to fetch server call data: \(error)")
+            // Local data is still saved, so this is not critical
         }
     }
 

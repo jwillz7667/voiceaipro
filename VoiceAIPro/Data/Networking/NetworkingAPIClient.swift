@@ -126,6 +126,18 @@ actor NetworkingAPIClient {
         return try await request(endpoint)
     }
 
+    /// Get full call details including transcripts, events, and recordings
+    func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse {
+        let endpoint = Endpoint.fullCallDetails(callSid: callSid)
+        return try await request(endpoint)
+    }
+
+    /// Get transcripts for a call
+    func getCallTranscripts(callSid: String) async throws -> CallTranscriptsResponse {
+        let endpoint = Endpoint.callTranscripts(callSid: callSid)
+        return try await request(endpoint)
+    }
+
     // MARK: - Recording Endpoints
 
     /// Get recordings list
@@ -245,6 +257,8 @@ enum Endpoint {
     case endCall(callSid: String)
     case callHistory(limit: Int, offset: Int, deviceId: String)
     case callDetails(callSid: String)
+    case fullCallDetails(callSid: String)
+    case callTranscripts(callSid: String)
     case recordings(limit: Int, offset: Int, deviceId: String)
     case deleteRecording(id: UUID)
     case prompts(deviceId: String)
@@ -265,6 +279,10 @@ enum Endpoint {
             return Constants.API.Endpoints.callsHistory
         case .callDetails(let callSid):
             return "\(Constants.API.Endpoints.calls)/\(callSid)"
+        case .fullCallDetails(let callSid):
+            return "\(Constants.API.Endpoints.calls)/\(callSid)/full"
+        case .callTranscripts(let callSid):
+            return "\(Constants.API.Endpoints.calls)/\(callSid)/transcripts"
         case .recordings:
             return Constants.API.Endpoints.recordings
         case .deleteRecording(let id):
@@ -286,7 +304,7 @@ enum Endpoint {
         switch self {
         case .token, .initiateCall, .endCall, .createPrompt, .setDefaultPrompt:
             return "POST"
-        case .callHistory, .callDetails, .recordings, .prompts:
+        case .callHistory, .callDetails, .fullCallDetails, .callTranscripts, .recordings, .prompts:
             return "GET"
         case .updatePrompt:
             return "PUT"

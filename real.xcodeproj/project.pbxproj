@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2FD6B1D32F0B00F900C222EF /* TwilioVoice in Frameworks */ = {isa = PBXBuildFile; productRef = 2F08F1B12F0620B0006B6313 /* TwilioVoice */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2F08F18B2F0620AF006B6313 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2FD6B1D32F0B00F900C222EF /* TwilioVoice in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,11 +201,11 @@
 			);
 			mainGroup = 2F08F1702F0620AD006B6313;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 77;
-			productRefGroup = 2F08F17A2F0620AD006B6313 /* Products */;
 			packageReferences = (
 				2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */,
 			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 2F08F17A2F0620AD006B6313 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -271,25 +276,6 @@
 			targetProxy = 2F08F1952F0620AF006B6313 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/twilio/twilio-voice-ios";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 6.10.0;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		2F08F1B12F0620B0006B6313 /* TwilioVoice */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */;
-			productName = TwilioVoice;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		2F08F19E2F0620AF006B6313 /* Debug */ = {
@@ -607,6 +593,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/twilio/twilio-voice-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2F08F1B12F0620B0006B6313 /* TwilioVoice */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2F08F1B02F0620B0006B6313 /* XCRemoteSwiftPackageReference "twilio-voice-ios" */;
+			productName = TwilioVoice;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2F08F1712F0620AD006B6313 /* Project object */;
 }

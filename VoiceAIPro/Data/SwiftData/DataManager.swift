@@ -139,8 +139,18 @@ class DataManager: ObservableObject {
 
     // MARK: - Transcripts
 
-    /// Save transcript entry
+    /// Save transcript entry (skips duplicates)
     func saveTranscript(_ entry: TranscriptEntry) throws {
+        // Check if this transcript already exists (by ID)
+        let entryId = entry.id
+        let existingDescriptor = FetchDescriptor<TranscriptEntry>(
+            predicate: #Predicate { $0.id == entryId }
+        )
+        if let existing = try? context.fetch(existingDescriptor), !existing.isEmpty {
+            // Already exists, skip
+            return
+        }
+
         if let callSid = entry.callSid {
             entry.callRecord = getCallRecord(callSid: callSid)
         }
@@ -213,9 +223,20 @@ class DataManager: ObservableObject {
 
     // MARK: - Recordings
 
-    /// Save recording metadata
+    /// Save recording metadata from server Recording model
     func saveRecordingMetadata(_ recording: Recording) throws {
         let metadata = RecordingMetadata(from: recording)
+        context.insert(metadata)
+        try context.save()
+    }
+
+    /// Save recording metadata entry directly
+    func saveRecordingMetadataEntry(_ metadata: RecordingMetadata) throws {
+        // Check if already exists
+        if getRecording(id: metadata.id) != nil {
+            // Already exists, skip
+            return
+        }
         context.insert(metadata)
         try context.save()
     }

@@ -200,6 +200,7 @@ protocol APIClientProtocol {
     func getPrompts() async throws -> [[String: Any]]
     func savePrompt(_ prompt: Prompt) async throws -> Prompt
     func deletePrompt(id: UUID) async throws
+    func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse
 }
 
 /// Protocol for WebSocket client
@@ -415,6 +416,25 @@ class APIClient: APIClientProtocol {
             throw APIError.serverError
         }
     }
+
+    func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.calls)/\(callSid)/full") else {
+            throw APIError.invalidURL
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        return try decoder.decode(FullCallDetailsResponse.self, from: data)
+    }
 }
 
 /// WebSocket client implementation for DI
@@ -541,6 +561,29 @@ class MockAPIClient: APIClientProtocol {
     }
 
     func deletePrompt(id: UUID) async throws {}
+
+    func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse {
+        return FullCallDetailsResponse(
+            source: "mock",
+            call: FullCallInfo(
+                id: UUID(),
+                callSid: callSid,
+                direction: "outbound",
+                phoneNumber: "+1234567890",
+                status: "ended",
+                startedAt: Date(),
+                endedAt: Date(),
+                durationSeconds: 60,
+                config: nil,
+                userId: nil,
+                prompt: nil
+            ),
+            events: [],
+            transcripts: [],
+            recordings: [],
+            statistics: nil
+        )
+    }
 }
 
 class MockWebSocketClient: WebSocketClientProtocol {

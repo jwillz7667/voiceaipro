@@ -346,12 +346,23 @@ function sendSessionConfig(session) {
  * See: https://platform.openai.com/docs/api-reference/realtime
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime session.update - only type and instructions
+  // GA gpt-realtime session.update
   // Voice, audio format, and turn_detection are set via WebSocket URL params
-  return {
+  const sessionConfig = {
     type: 'realtime',
     instructions: cfg.instructions || getDefaultInstructions(),
   };
+
+  // CRITICAL: Enable input audio transcription for user speech
+  // Without this, we don't get user transcripts!
+  const transcriptionModel = cfg.transcriptionModel || 'gpt-4o-transcribe';
+  if (transcriptionModel && transcriptionModel !== 'none') {
+    sessionConfig.input_audio_transcription = {
+      model: transcriptionModel,
+    };
+  }
+
+  return sessionConfig;
 }
 
 /**
