@@ -53,12 +53,18 @@ struct CallHistoryResponse: Codable {
     /// List of calls
     let calls: [CallHistoryItem]
 
-    /// Total count
+    /// Pagination info (nested object from server)
+    let pagination: PaginationInfo?
+
+    /// Convenience accessors for pagination
+    var total: Int? { pagination?.total }
+    var offset: Int? { pagination?.offset }
+    var limit: Int? { pagination?.limit }
+}
+
+/// Pagination information from server
+struct PaginationInfo: Codable {
     let total: Int?
-
-    /// Current offset
     let offset: Int?
-
-    /// Limit used
     let limit: Int?
 }

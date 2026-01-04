@@ -21,6 +21,7 @@ struct PromptsResponse: Codable {
 /// Prompt data transfer object (matches server format)
 struct PromptDTO: Codable, Identifiable {
     let id: UUID
+    let userId: String?
     let name: String
     let instructions: String
     let voice: String?
@@ -31,6 +32,7 @@ struct PromptDTO: Codable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id
+        case userId = "user_id"
         case name
         case instructions
         case voice
@@ -63,20 +65,18 @@ struct PromptDTO: Codable, Identifiable {
 }
 
 /// VAD configuration DTO
+/// Note: Server sends camelCase keys (prefixPaddingMs, silenceDurationMs, createResponse)
+/// so we don't need CodingKeys - the decoder's convertFromSnakeCase won't apply
+/// since the keys are already camelCase
 struct VADConfigDTO: Codable {
     let type: String?
     let threshold: Double?
     let prefixPaddingMs: Int?
     let silenceDurationMs: Int?
+    let idleTimeoutMs: Int?
     let eagerness: String?
-
-    enum CodingKeys: String, CodingKey {
-        case type
-        case threshold
-        case prefixPaddingMs = "prefix_padding_ms"
-        case silenceDurationMs = "silence_duration_ms"
-        case eagerness
-    }
+    let createResponse: Bool?
+    let interruptResponse: Bool?
 
     /// Convert to VADConfig model
     func toVADConfig() -> VADConfig {

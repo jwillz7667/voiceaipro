@@ -324,14 +324,34 @@ async function attemptReconnection(session, state) {
 function sendSessionConfig(session) {
   const sessionConfig = buildSessionConfig(session.config);
 
+  // Log detailed config being sent to OpenAI
   logger.info('Building session config for OpenAI', {
     callSid: session.callSid,
-    inputInstructionsLength: session.config.instructions?.length || 0,
-    outputInstructionsLength: sessionConfig.instructions?.length || 0,
-    usingDefault: !session.config.instructions,
-    voice: session.config.voice,
-    vadType: session.config.vadType,
-    instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
+    // iOS app input
+    inputConfig: {
+      instructionsLength: session.config.instructions?.length || 0,
+      usingDefault: !session.config.instructions || !session.config.instructions.trim(),
+      voice: session.config.voice,
+      model: session.config.model,
+      vadType: session.config.vadType,
+      vadConfig: session.config.vadConfig,
+      temperature: session.config.temperature,
+      maxOutputTokens: session.config.maxOutputTokens,
+      voiceSpeed: session.config.voiceSpeed,
+      transcriptionModel: session.config.transcriptionModel,
+      noiseReduction: session.config.noiseReduction,
+    },
+    // What we're sending to OpenAI
+    openAIConfig: {
+      instructionsLength: sessionConfig.instructions?.length,
+      instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
+      temperature: sessionConfig.temperature,
+      maxOutputTokens: sessionConfig.max_response_output_tokens,
+      turnDetection: sessionConfig.turn_detection,
+      transcription: sessionConfig.input_audio_transcription,
+      voiceSpeed: sessionConfig.output_audio_speed,
+      noiseReduction: sessionConfig.input_audio_noise_reduction,
+    },
   });
 
   session.sendToOpenAI({
@@ -341,7 +361,7 @@ function sendSessionConfig(session) {
 
   logger.info('Session config sent to OpenAI', {
     callSid: session.callSid,
-    instructionsLength: sessionConfig.instructions?.length,
+    configKeys: Object.keys(sessionConfig),
   });
 
   // Log to database
@@ -357,11 +377,20 @@ function sendSessionConfig(session) {
  */
 function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update
-  // Voice, audio format, and turn_detection are set via WebSocket URL params
   const sessionConfig = {
-    type: 'realtime',
-    instructions: cfg.instructions || getDefaultInstructions(),
+    // Instructions from iOS app, or default if empty/not provided
+    instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
   };
+
+  // Temperature for response generation (0.6-1.2, default 0.8)
+  if (cfg.temperature !== undefined && cfg.temperature !== null) {
+    sessionConfig.temperature = cfg.temperature;
+  }
+
+  // Max output tokens (default 4096, "inf" for unlimited)
+  if (cfg.maxOutputTokens !== undefined && cfg.maxOutputTokens !== null) {
+    sessionConfig.max_response_output_tokens = cfg.maxOutputTokens;
+  }
 
   // CRITICAL: Enable input audio transcription for user speech
   // Without this, we don't get user transcripts!
@@ -369,6 +398,64 @@ function buildSessionConfig(cfg) {
   if (transcriptionModel && transcriptionModel !== 'none') {
     sessionConfig.input_audio_transcription = {
       model: transcriptionModel,
+    };
+  }
+
+  // Turn detection / VAD configuration
+  // This overrides the URL parameter with detailed settings
+  const vadType = cfg.vadType || 'semantic_vad';
+  if (vadType === 'disabled' || vadType === 'none') {
+    sessionConfig.turn_detection = null; // Disable turn detection (manual mode)
+  } else if (vadType === 'semantic_vad') {
+    sessionConfig.turn_detection = {
+      type: 'semantic_vad',
+    };
+    // Add eagerness if provided (low, medium, high, auto)
+    if (cfg.vadConfig?.eagerness) {
+      sessionConfig.turn_detection.eagerness = cfg.vadConfig.eagerness;
+    }
+    // Add create_response setting
+    if (cfg.vadConfig?.createResponse !== undefined) {
+      sessionConfig.turn_detection.create_response = cfg.vadConfig.createResponse;
+    }
+    // Add interrupt_response setting
+    if (cfg.vadConfig?.interruptResponse !== undefined) {
+      sessionConfig.turn_detection.interrupt_response = cfg.vadConfig.interruptResponse;
+    }
+  } else if (vadType === 'server_vad') {
+    sessionConfig.turn_detection = {
+      type: 'server_vad',
+    };
+    // Add server VAD specific settings
+    if (cfg.vadConfig?.threshold !== undefined) {
+      sessionConfig.turn_detection.threshold = cfg.vadConfig.threshold;
+    }
+    if (cfg.vadConfig?.prefixPaddingMs !== undefined) {
+      sessionConfig.turn_detection.prefix_padding_ms = cfg.vadConfig.prefixPaddingMs;
+    }
+    if (cfg.vadConfig?.silenceDurationMs !== undefined) {
+      sessionConfig.turn_detection.silence_duration_ms = cfg.vadConfig.silenceDurationMs;
+    }
+    // Add create_response setting
+    if (cfg.vadConfig?.createResponse !== undefined) {
+      sessionConfig.turn_detection.create_response = cfg.vadConfig.createResponse;
+    }
+    // Add interrupt_response setting
+    if (cfg.vadConfig?.interruptResponse !== undefined) {
+      sessionConfig.turn_detection.interrupt_response = cfg.vadConfig.interruptResponse;
+    }
+  }
+
+  // Voice speed / output audio speed (if supported by API)
+  // Note: voiceSpeed is sent but OpenAI may not support it yet in all models
+  if (cfg.voiceSpeed !== undefined && cfg.voiceSpeed !== 1.0) {
+    sessionConfig.output_audio_speed = cfg.voiceSpeed;
+  }
+
+  // Noise reduction (if provided)
+  if (cfg.noiseReduction) {
+    sessionConfig.input_audio_noise_reduction = {
+      type: cfg.noiseReduction,
     };
   }
 

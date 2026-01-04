@@ -24,7 +24,18 @@ export async function initiateOutgoingCall(options) {
     userId,
     promptId,
     hasSessionConfig: !!sessionConfig,
-    sessionConfigInstructions: sessionConfig?.instructions?.length || 0,
+    sessionConfigDetails: sessionConfig ? {
+      instructionsLength: sessionConfig.instructions?.length || 0,
+      instructionsPreview: sessionConfig.instructions?.substring(0, 50) || '(empty)',
+      voice: sessionConfig.voice,
+      model: sessionConfig.model,
+      vadType: sessionConfig.vadType,
+      vadConfig: sessionConfig.vadConfig,
+      temperature: sessionConfig.temperature,
+      maxOutputTokens: sessionConfig.maxOutputTokens,
+      voiceSpeed: sessionConfig.voiceSpeed,
+      transcriptionModel: sessionConfig.transcriptionModel,
+    } : null,
   });
 
   // Load prompt config from database if promptId is provided and sessionConfig doesn't have instructions

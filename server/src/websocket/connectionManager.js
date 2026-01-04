@@ -305,6 +305,18 @@ class ConnectionManager {
       sessionId: session.id,
       direction: session.direction,
       phoneNumber: session.phoneNumber,
+      config: {
+        voice: session.config.voice,
+        model: session.config.model,
+        vadType: session.config.vadType,
+        vadConfig: session.config.vadConfig,
+        temperature: session.config.temperature,
+        maxOutputTokens: session.config.maxOutputTokens,
+        voiceSpeed: session.config.voiceSpeed,
+        transcriptionModel: session.config.transcriptionModel,
+        instructionsLength: session.config.instructions?.length || 0,
+        instructionsPreview: session.config.instructions?.substring(0, 50) || '(default)',
+      },
     });
 
     return session;

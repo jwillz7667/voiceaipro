@@ -35,6 +35,17 @@ router.post('/outgoing', async (req, res) => {
       from: fromNumber,
       userId: user_id,
       promptId: prompt_id,
+      hasConfig: !!sessionConfig,
+      configFromiOS: sessionConfig ? {
+        instructionsLength: sessionConfig.instructions?.length || 0,
+        instructionsPreview: sessionConfig.instructions?.substring(0, 100) || '(none)',
+        voice: sessionConfig.voice,
+        model: sessionConfig.model,
+        vadType: sessionConfig.vadType,
+        temperature: sessionConfig.temperature,
+        maxOutputTokens: sessionConfig.maxOutputTokens,
+        voiceSpeed: sessionConfig.voiceSpeed,
+      } : null,
     });
 
     const call = await callService.initiateOutgoingCall({
