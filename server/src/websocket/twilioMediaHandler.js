@@ -28,6 +28,7 @@ import { connectToOpenAI } from './openaiRealtimeHandler.js';
 import { logEvent, logTranscript } from '../services/eventLogger.js';
 import { startRecording, appendUserAudio, stopRecording } from '../services/recordingService.js';
 import { query } from '../db/pool.js';
+import { loadPromptConfig } from '../services/promptService.js';
 
 const logger = createLogger('twilio-media');
 
@@ -275,18 +276,48 @@ export function handleTwilioMediaStream(ws, request) {
       encoding: mediaFormat.encoding,     // Expected: audio/x-mulaw
       sampleRate: mediaFormat.sampleRate, // Expected: 8000
       channels: mediaFormat.channels,     // Expected: 1
+      promptId: customParameters.promptId,
+      userId: customParameters.userId,
     });
 
     // Create or retrieve session
     session = connectionManager.getSession(callSid);
     if (!session) {
+      // Load prompt config from database if promptId is provided
+      let promptConfig = null;
+      if (customParameters.promptId) {
+        promptConfig = await loadPromptConfig(customParameters.promptId);
+        logger.info('Loaded prompt config for new session', {
+          callSid,
+          promptId: customParameters.promptId,
+          hasInstructions: !!promptConfig?.instructions,
+          instructionsLength: promptConfig?.instructions?.length || 0,
+          voice: promptConfig?.voice,
+        });
+      }
+
       session = connectionManager.createSession(callSid, {
         direction: customParameters.direction || 'outbound',
         phoneNumber: customParameters.to || customParameters.from || null,
         userId: customParameters.userId || null,
         promptId: customParameters.promptId || null,
         protocolVersion,
+        config: promptConfig || undefined,
       });
+    } else {
+      // Session already exists (created by initiateOutgoingCall)
+      // If it doesn't have instructions but has a promptId, load them now
+      if (session.promptId && !session.config.instructions) {
+        const promptConfig = await loadPromptConfig(session.promptId);
+        if (promptConfig) {
+          logger.info('Loading missing prompt config for existing session', {
+            callSid,
+            promptId: session.promptId,
+            instructionsLength: promptConfig.instructions?.length || 0,
+          });
+          session.updateConfig(promptConfig);
+        }
+      }
     }
 
     // Initialize audio buffer for this session

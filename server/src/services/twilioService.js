@@ -2,6 +2,7 @@ import twilio from 'twilio';
 import config from '../config/environment.js';
 import { createLogger } from '../utils/logger.js';
 import connectionManager from '../websocket/connectionManager.js';
+import { loadPromptConfig } from './promptService.js';
 
 const logger = createLogger('twilio-service');
 
@@ -22,7 +23,24 @@ export async function initiateOutgoingCall(options) {
     from,
     userId,
     promptId,
+    hasSessionConfig: !!sessionConfig,
+    sessionConfigInstructions: sessionConfig?.instructions?.length || 0,
   });
+
+  // Load prompt config from database if promptId is provided and sessionConfig doesn't have instructions
+  let finalConfig = sessionConfig;
+  if (promptId && (!sessionConfig || !sessionConfig.instructions)) {
+    const promptConfig = await loadPromptConfig(promptId);
+    if (promptConfig) {
+      logger.info('Loaded prompt config for outgoing call', {
+        promptId,
+        instructionsLength: promptConfig.instructions?.length || 0,
+        voice: promptConfig.voice,
+      });
+      // Merge prompt config with any provided session config
+      finalConfig = { ...promptConfig, ...sessionConfig };
+    }
+  }
 
   const twimlParams = new URLSearchParams();
   if (userId) twimlParams.set('userId', userId);
@@ -46,6 +64,7 @@ export async function initiateOutgoingCall(options) {
     to: call.to,
     from: call.from,
     status: call.status,
+    configInstructionsLength: finalConfig?.instructions?.length || 0,
   });
 
   connectionManager.createSession(call.sid, {
@@ -53,7 +72,7 @@ export async function initiateOutgoingCall(options) {
     phoneNumber: to,
     userId,
     promptId,
-    config: sessionConfig,
+    config: finalConfig,
   });
 
   return call;

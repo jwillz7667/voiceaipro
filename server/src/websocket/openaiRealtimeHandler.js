@@ -324,6 +324,16 @@ async function attemptReconnection(session, state) {
 function sendSessionConfig(session) {
   const sessionConfig = buildSessionConfig(session.config);
 
+  logger.info('Building session config for OpenAI', {
+    callSid: session.callSid,
+    inputInstructionsLength: session.config.instructions?.length || 0,
+    outputInstructionsLength: sessionConfig.instructions?.length || 0,
+    usingDefault: !session.config.instructions,
+    voice: session.config.voice,
+    vadType: session.config.vadType,
+    instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
+  });
+
   session.sendToOpenAI({
     type: 'session.update',
     session: sessionConfig,
