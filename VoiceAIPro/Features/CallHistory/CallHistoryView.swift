@@ -132,9 +132,9 @@ struct CallHistoryView: View {
         syncError = nil
 
         do {
+            // container.apiClient returns [[String: Any]] - parse each dict to CallHistoryItem
             let serverCalls = try await container.apiClient.getCallHistory(limit: 100, offset: 0)
 
-            // Convert server response to CallHistoryItem and sync
             var historyItems: [CallHistoryItem] = []
             for callData in serverCalls {
                 if let item = CallHistoryItem(from: callData) {
@@ -142,11 +142,12 @@ struct CallHistoryView: View {
                 }
             }
 
-            // Sync to SwiftData
+            // Sync parsed items to SwiftData
             try await container.dataManager?.syncCallHistory(with: historyItems)
 
         } catch {
             syncError = error.localizedDescription
+            print("❌ CallHistory sync error: \(error)")
         }
 
         isLoading = false

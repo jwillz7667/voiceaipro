@@ -1,6 +1,8 @@
 import Foundation
 
 /// Response from token endpoint
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
+/// CodingKeys use camelCase to match the converted keys
 struct TokenResponse: Codable {
     /// Access token
     let token: String
@@ -17,11 +19,12 @@ struct TokenResponse: Codable {
     /// Identity the token was issued for
     let identity: String?
 
+    // CodingKeys without snake_case raw values - decoder's convertFromSnakeCase handles the conversion
     enum CodingKeys: String, CodingKey {
         case token
-        case tokenType = "token_type"
-        case expiresAt = "expires_at"
-        case expiresIn = "expires_in"
+        case tokenType
+        case expiresAt
+        case expiresIn
         case identity
     }
 

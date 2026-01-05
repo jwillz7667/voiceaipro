@@ -1,6 +1,7 @@
 import Foundation
 
 /// Detailed call information
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct CallDetails: Codable, Identifiable {
     /// Unique identifier
     let id: UUID
@@ -47,24 +48,6 @@ struct CallDetails: Codable, Identifiable {
     /// Events count
     let eventsCount: Int?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case callSid = "call_sid"
-        case direction
-        case phoneNumber = "phone_number"
-        case status
-        case startedAt = "started_at"
-        case endedAt = "ended_at"
-        case durationSeconds = "duration_seconds"
-        case promptId = "prompt_id"
-        case promptName = "prompt_name"
-        case promptInstructions = "prompt_instructions"
-        case config
-        case recording
-        case transcript
-        case eventsCount = "events_count"
-    }
-
     /// Parsed call status
     var callStatus: CallStatus? {
         CallStatus(rawValue: status)
@@ -88,13 +71,6 @@ struct ConfigSnapshot: Codable {
     let voice: String?
     let vadType: String?
     let transcriptionModel: String?
-
-    enum CodingKeys: String, CodingKey {
-        case model
-        case voice
-        case vadType = "vad_type"
-        case transcriptionModel = "transcription_model"
-    }
 }
 
 /// Recording info
@@ -104,14 +80,6 @@ struct RecordingInfo: Codable, Identifiable {
     let fileSize: Int?
     let format: String?
     let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case duration
-        case fileSize = "file_size"
-        case format
-        case createdAt = "created_at"
-    }
 
     /// Formatted duration
     var formattedDuration: String {

@@ -1,6 +1,7 @@
 import Foundation
 
 /// Single call in history
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct CallHistoryItem: Codable, Identifiable {
     /// Unique identifier
     let id: UUID
@@ -35,19 +36,8 @@ struct CallHistoryItem: Codable, Identifiable {
     /// Prompt used
     let promptName: String?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case callSid = "call_sid"
-        case direction
-        case phoneNumber = "phone_number"
-        case status
-        case startedAt = "started_at"
-        case endedAt = "ended_at"
-        case durationSeconds = "duration_seconds"
-        case hasRecording = "has_recording"
-        case recordingId = "recording_id"
-        case promptName = "prompt_name"
-    }
+    // Note: CodingKeys removed - NetworkingAPIClient uses .convertFromSnakeCase which
+    // automatically converts JSON keys like "call_sid" to Swift property "callSid"
 
     /// Parsed call status
     var callStatus: CallStatus? {

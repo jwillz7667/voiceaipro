@@ -2,6 +2,7 @@ import Foundation
 
 /// Full call details response from the server
 /// Matches the server's /api/calls/:callSid/full endpoint
+/// Note: All structs use automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct FullCallDetailsResponse: Codable {
     /// Source of data (database or active)
     let source: String?
@@ -35,20 +36,6 @@ struct FullCallInfo: Codable, Identifiable {
     let config: AnyCodable?
     let userId: String?
     let prompt: ServerPromptInfo?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case callSid = "call_sid"
-        case direction
-        case phoneNumber = "phone_number"
-        case status
-        case startedAt = "started_at"
-        case endedAt = "ended_at"
-        case durationSeconds = "duration_seconds"
-        case config
-        case userId = "user_id"
-        case prompt
-    }
 }
 
 /// Prompt info from server
@@ -66,14 +53,6 @@ struct ServerEventEntry: Codable, Identifiable {
     let direction: String?
     let payload: AnyCodable?
     let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case eventType = "event_type"
-        case direction
-        case payload
-        case createdAt = "created_at"
-    }
 }
 
 /// Transcript entry from server
@@ -83,14 +62,6 @@ struct ServerTranscriptEntry: Codable, Identifiable {
     let content: String
     let timestampMs: Int?
     let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case speaker
-        case content
-        case timestampMs = "timestamp_ms"
-        case createdAt = "created_at"
-    }
 
     /// Convert to SwiftData TranscriptEntry
     func toTranscriptEntry(callSid: String?) -> TranscriptEntry {
@@ -117,17 +88,6 @@ struct ServerRecordingEntry: Codable, Identifiable {
     let sampleRate: Int?
     let channels: Int?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case durationSeconds = "duration_seconds"
-        case fileSizeBytes = "file_size_bytes"
-        case format
-        case createdAt = "created_at"
-        case callSid = "call_sid"
-        case sampleRate = "sample_rate"
-        case channels
-    }
-
     /// Convert to SwiftData RecordingMetadata
     func toRecordingMetadata(callSessionId: UUID) -> RecordingMetadata {
         RecordingMetadata(
@@ -153,14 +113,6 @@ struct CallStatistics: Codable {
     let recordingCount: Int?
     let userMessageCount: Int?
     let assistantMessageCount: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case eventCount = "event_count"
-        case transcriptCount = "transcript_count"
-        case recordingCount = "recording_count"
-        case userMessageCount = "user_message_count"
-        case assistantMessageCount = "assistant_message_count"
-    }
 }
 
 /// Call transcripts response from server

@@ -139,7 +139,9 @@ struct RecordingsView: View {
         isLoading = true
         Task {
             do {
+                // container.apiClient returns [[String: Any]] - parse each dict
                 let serverRecordings = try await container.apiClient.getRecordings(limit: 50, offset: 0)
+
                 // Sync with local database
                 for recordingData in serverRecordings {
                     // Parse from dictionary and save if not exists
@@ -167,6 +169,7 @@ struct RecordingsView: View {
                 try? modelContext.save()
             } catch {
                 errorMessage = "Failed to refresh recordings: \(error.localizedDescription)"
+                print("❌ Recordings sync error: \(error)")
             }
             isLoading = false
         }

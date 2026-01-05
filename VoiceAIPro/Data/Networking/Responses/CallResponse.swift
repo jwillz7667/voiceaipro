@@ -1,6 +1,7 @@
 import Foundation
 
 /// Response from call initiation endpoint
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct CallResponse: Codable {
     /// Twilio call SID
     let callSid: String
@@ -25,17 +26,6 @@ struct CallResponse: Codable {
 
     /// Timestamp
     let createdAt: Date?
-
-    enum CodingKeys: String, CodingKey {
-        case callSid = "call_sid"
-        case status
-        case direction
-        case to
-        case from
-        case promptId = "prompt_id"
-        case sessionId = "session_id"
-        case createdAt = "created_at"
-    }
 
     /// Parsed call status
     var callStatus: CallStatus? {

@@ -48,8 +48,13 @@ export async function initiateOutgoingCall(options) {
         instructionsLength: promptConfig.instructions?.length || 0,
         voice: promptConfig.voice,
       });
-      // Merge prompt config with any provided session config
-      finalConfig = { ...promptConfig, ...sessionConfig };
+      // Filter out empty/null/undefined values from sessionConfig to avoid overriding prompt values
+      // This prevents iOS sending instructions: "" from overriding prompt instructions
+      const filteredSessionConfig = sessionConfig ? Object.fromEntries(
+        Object.entries(sessionConfig).filter(([_, v]) => v !== '' && v !== null && v !== undefined)
+      ) : {};
+      // Merge prompt config with filtered session config (session config wins for non-empty values)
+      finalConfig = { ...promptConfig, ...filteredSessionConfig };
     }
   }
 

@@ -1,6 +1,7 @@
 import Foundation
 
 /// Error response from server
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct ErrorResponse: Codable {
     /// Error type/code
     let error: String
@@ -20,13 +21,14 @@ struct ErrorResponse: Codable {
     /// Request ID for debugging
     let requestId: String?
 
+    // CodingKeys without snake_case raw values - decoder's convertFromSnakeCase handles the conversion
     enum CodingKeys: String, CodingKey {
         case error
         case message
-        case statusCode = "status_code"
+        case statusCode
         case details
         case timestamp
-        case requestId = "request_id"
+        case requestId
     }
 
     init(from decoder: Decoder) throws {

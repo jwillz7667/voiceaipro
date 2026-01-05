@@ -19,6 +19,7 @@ struct PromptsResponse: Codable {
 }
 
 /// Prompt data transfer object (matches server format)
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct PromptDTO: Codable, Identifiable {
     let id: UUID
     let userId: String?
@@ -29,18 +30,6 @@ struct PromptDTO: Codable, Identifiable {
     let isDefault: Bool
     let createdAt: Date
     let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id
-        case userId = "user_id"
-        case name
-        case instructions
-        case voice
-        case vadConfig = "vad_config"
-        case isDefault = "is_default"
-        case createdAt = "created_at"
-        case updatedAt = "updated_at"
-    }
 
     /// Convert to Prompt model
     func toPrompt() -> Prompt {

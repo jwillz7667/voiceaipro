@@ -19,6 +19,7 @@ struct RealtimeConfig: Codable, Equatable {
     static let `default` = RealtimeConfig()
 
     /// Convert to JSON dictionary for API transmission
+    /// Note: Empty strings are omitted to avoid overriding server/prompt defaults
     func toAPIParams() -> [String: Any] {
         var params: [String: Any] = [
             "model": model.rawValue,
@@ -26,9 +27,13 @@ struct RealtimeConfig: Codable, Equatable {
             "voiceSpeed": voiceSpeed,
             "transcriptionModel": transcriptionModel.rawValue,
             "temperature": temperature,
-            "maxOutputTokens": maxOutputTokens,
-            "instructions": instructions
+            "maxOutputTokens": maxOutputTokens
         ]
+
+        // Only include instructions if not empty - empty string would override prompt instructions
+        if !instructions.isEmpty {
+            params["instructions"] = instructions
+        }
 
         if let noiseReduction = noiseReduction {
             params["noiseReduction"] = noiseReduction.rawValue

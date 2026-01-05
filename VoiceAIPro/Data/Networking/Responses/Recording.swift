@@ -1,6 +1,7 @@
 import Foundation
 
 /// Recording model
+/// Note: Uses automatic snake_case conversion from NetworkingAPIClient's keyDecodingStrategy
 struct Recording: Codable, Identifiable {
     /// Unique identifier
     let id: UUID
@@ -29,17 +30,8 @@ struct Recording: Codable, Identifiable {
     /// Whether recording has transcript
     let hasTranscript: Bool?
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case callSid = "call_sid"
-        case duration
-        case fileSize = "file_size"
-        case format
-        case sampleRate = "sample_rate"
-        case channels
-        case createdAt = "created_at"
-        case hasTranscript = "has_transcript"
-    }
+    // Note: CodingKeys removed - NetworkingAPIClient uses .convertFromSnakeCase which
+    // automatically converts JSON keys like "call_sid" to Swift property "callSid"
 
     /// Formatted duration
     var formattedDuration: String {
