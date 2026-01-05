@@ -386,15 +386,8 @@ function buildSessionConfig(cfg) {
     instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
   };
 
-  // Temperature for response generation (0.6-1.2, default 0.8)
-  if (cfg.temperature !== undefined && cfg.temperature !== null) {
-    sessionConfig.temperature = cfg.temperature;
-  }
-
-  // Max output tokens (default 4096, "inf" for unlimited)
-  if (cfg.maxOutputTokens !== undefined && cfg.maxOutputTokens !== null) {
-    sessionConfig.max_response_output_tokens = cfg.maxOutputTokens;
-  }
+  // Note: temperature and max_response_output_tokens are not supported in session.update
+  // They can only be set per-response via response.create
 
   // CRITICAL: Enable input audio transcription for user speech
   // Without this, we don't get user transcripts!
@@ -450,18 +443,8 @@ function buildSessionConfig(cfg) {
     }
   }
 
-  // Voice speed / output audio speed (if supported by API)
-  // Note: voiceSpeed is sent but OpenAI may not support it yet in all models
-  if (cfg.voiceSpeed !== undefined && cfg.voiceSpeed !== 1.0) {
-    sessionConfig.output_audio_speed = cfg.voiceSpeed;
-  }
-
-  // Noise reduction (if provided)
-  if (cfg.noiseReduction) {
-    sessionConfig.input_audio_noise_reduction = {
-      type: cfg.noiseReduction,
-    };
-  }
+  // Note: output_audio_speed and input_audio_noise_reduction are not currently
+  // supported in the Realtime API session.update - these may be added in future versions
 
   return sessionConfig;
 }
