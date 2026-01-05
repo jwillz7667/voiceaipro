@@ -280,6 +280,28 @@ export function handleTwilioMediaStream(ws, request) {
       userId: customParameters.userId,
     });
 
+    // Parse iOS config from custom parameters if provided
+    let iosConfig = null;
+    if (customParameters.config) {
+      try {
+        iosConfig = JSON.parse(customParameters.config);
+        logger.info('Parsed iOS config from custom parameters', {
+          callSid,
+          hasInstructions: !!iosConfig.instructions,
+          instructionsLength: iosConfig.instructions?.length || 0,
+          voice: iosConfig.voice,
+          model: iosConfig.model,
+          vadType: iosConfig.vadConfig?.type || iosConfig.vadType,
+        });
+      } catch (e) {
+        logger.error('Failed to parse iOS config JSON', {
+          callSid,
+          error: e.message,
+          configPreview: customParameters.config?.substring(0, 100),
+        });
+      }
+    }
+
     // Create or retrieve session
     session = connectionManager.getSession(callSid);
     if (!session) {
@@ -296,18 +318,41 @@ export function handleTwilioMediaStream(ws, request) {
         });
       }
 
+      // Merge configs: iOS config takes priority over prompt config
+      // This allows the iOS app to override prompt defaults
+      const mergedConfig = {
+        ...promptConfig,
+        ...iosConfig,
+      };
+
+      logger.info('Creating session with merged config', {
+        callSid,
+        hasPromptConfig: !!promptConfig,
+        hasIosConfig: !!iosConfig,
+        mergedInstructions: mergedConfig.instructions?.length || 0,
+        mergedVoice: mergedConfig.voice,
+      });
+
       session = connectionManager.createSession(callSid, {
         direction: customParameters.direction || 'outbound',
         phoneNumber: customParameters.to || customParameters.from || null,
         userId: customParameters.userId || null,
         promptId: customParameters.promptId || null,
         protocolVersion,
-        config: promptConfig || undefined,
+        config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined,
       });
     } else {
       // Session already exists (created by initiateOutgoingCall)
+      // Apply iOS config if provided
+      if (iosConfig) {
+        logger.info('Applying iOS config to existing session', {
+          callSid,
+          instructionsLength: iosConfig.instructions?.length || 0,
+        });
+        session.updateConfig(iosConfig);
+      }
       // If it doesn't have instructions but has a promptId, load them now
-      if (session.promptId && !session.config.instructions) {
+      else if (session.promptId && !session.config.instructions) {
         const promptConfig = await loadPromptConfig(session.promptId);
         if (promptConfig) {
           logger.info('Loading missing prompt config for existing session', {

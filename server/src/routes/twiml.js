@@ -17,15 +17,22 @@ router.post('/outgoing', (req, res) => {
     CallSid,
     userId,
     promptId,
+    PromptId,  // iOS sends as PromptId
+    Config,    // iOS sends config JSON here
     direction = 'outbound',
   } = req.body;
+
+  // Use PromptId (from iOS) or promptId
+  const effectivePromptId = PromptId || promptId;
 
   logger.info('Outgoing call TwiML requested', {
     to: To,
     from: From,
     callSid: CallSid,
     userId,
-    promptId,
+    promptId: effectivePromptId,
+    hasConfig: !!Config,
+    configLength: Config?.length || 0,
   });
 
   const response = new VoiceResponse();
@@ -42,8 +49,12 @@ router.post('/outgoing', (req, res) => {
   if (userId) {
     stream.parameter({ name: 'userId', value: userId });
   }
-  if (promptId) {
-    stream.parameter({ name: 'promptId', value: promptId });
+  if (effectivePromptId) {
+    stream.parameter({ name: 'promptId', value: effectivePromptId });
+  }
+  // Pass the iOS config JSON to the media stream
+  if (Config) {
+    stream.parameter({ name: 'config', value: Config });
   }
 
   res.type('text/xml');

@@ -386,17 +386,10 @@ function buildSessionConfig(cfg) {
     instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
   };
 
-  // Note: temperature and max_response_output_tokens are not supported in session.update
-  // They can only be set per-response via response.create
-
-  // CRITICAL: Enable input audio transcription for user speech
-  // Without this, we don't get user transcripts!
-  const transcriptionModel = cfg.transcriptionModel || 'gpt-4o-transcribe';
-  if (transcriptionModel && transcriptionModel !== 'none') {
-    sessionConfig.input_audio_transcription = {
-      model: transcriptionModel,
-    };
-  }
+  // Note: These parameters are NOT supported in session.update for gpt-realtime:
+  // - temperature (only per-response)
+  // - max_response_output_tokens (only per-response)
+  // - input_audio_transcription (configured via URL or not supported)
 
   // Turn detection / VAD configuration
   // This overrides the URL parameter with detailed settings
