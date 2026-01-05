@@ -105,32 +105,23 @@ class OpenAISessionState {
 }
 
 /**
- * Build the OpenAI Realtime WebSocket URL with session config
- * Voice, audio format, and turn detection are passed as URL parameters
+ * Build the OpenAI Realtime WebSocket URL
+ * Only essential connection params go in URL; session.update handles the rest
+ * See: https://platform.openai.com/docs/guides/realtime
  */
 function buildOpenAIUrl(sessionConfig) {
   const baseUrl = config.openai.realtimeBaseUrl;
   const params = new URLSearchParams();
 
-  // Model
+  // Model - required in URL
   params.set('model', sessionConfig.model || config.openai.defaultModel);
 
-  // Voice - use session config or default
-  params.set('voice', sessionConfig.voice || config.openai.defaultVoice);
-
-  // Audio formats for Twilio (μ-law 8kHz)
+  // Audio formats for Twilio (μ-law 8kHz) - required in URL for proper codec
   params.set('input_audio_format', 'g711_ulaw');
   params.set('output_audio_format', 'g711_ulaw');
 
-  // Turn detection (VAD)
-  const vadType = sessionConfig.vadType || config.openai.defaultVadType;
-  if (vadType === 'disabled' || vadType === 'none') {
-    // No turn detection - manual mode
-    params.set('turn_detection', 'none');
-  } else {
-    // semantic_vad or server_vad
-    params.set('turn_detection', vadType);
-  }
+  // Note: voice and turn_detection are configured via session.update
+  // to allow mid-session changes and proper nested structure
 
   return `${baseUrl}?${params.toString()}`;
 }
@@ -325,7 +316,7 @@ function sendSessionConfig(session) {
   const sessionConfig = buildSessionConfig(session.config);
 
   // Log detailed config being sent to OpenAI
-  logger.info('Building session config for OpenAI', {
+  logger.info('Building session config for OpenAI (GA format)', {
     callSid: session.callSid,
     // iOS app input
     inputConfig: {
@@ -335,22 +326,15 @@ function sendSessionConfig(session) {
       model: session.config.model,
       vadType: session.config.vadType,
       vadConfig: session.config.vadConfig,
-      temperature: session.config.temperature,
-      maxOutputTokens: session.config.maxOutputTokens,
       voiceSpeed: session.config.voiceSpeed,
-      transcriptionModel: session.config.transcriptionModel,
-      noiseReduction: session.config.noiseReduction,
     },
-    // What we're sending to OpenAI
+    // What we're sending to OpenAI (GA nested format)
     openAIConfig: {
+      type: sessionConfig.type,
       instructionsLength: sessionConfig.instructions?.length,
       instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
-      temperature: sessionConfig.temperature,
-      maxOutputTokens: sessionConfig.max_response_output_tokens,
-      turnDetection: sessionConfig.turn_detection,
-      transcription: sessionConfig.input_audio_transcription,
-      voiceSpeed: sessionConfig.output_audio_speed,
-      noiseReduction: sessionConfig.input_audio_noise_reduction,
+      audioInput: sessionConfig.audio?.input,
+      audioOutput: sessionConfig.audio?.output,
     },
   });
 
@@ -374,70 +358,83 @@ function sendSessionConfig(session) {
  * Build OpenAI session configuration from our config format
  * Maps our configuration schema to OpenAI's gpt-realtime GA format
  * See: https://platform.openai.com/docs/api-reference/realtime
+ * See: https://platform.openai.com/docs/guides/realtime
+ *
+ * GA format structure:
+ * {
+ *   type: "realtime",
+ *   instructions: "...",
+ *   audio: {
+ *     input: { turn_detection: { type, eagerness, ... } },
+ *     output: { voice: "marin", speed: 1.0 }
+ *   }
+ * }
  */
 function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update
-  // See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
   const sessionConfig = {
-    // Required: Session type - 'realtime' for speech-to-speech, 'transcription' for transcription-only
+    // Required: Session type - 'realtime' for speech-to-speech
     type: 'realtime',
 
     // Instructions from iOS app, or default if empty/not provided
     instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
+
+    // Audio configuration (nested structure for GA API)
+    audio: {
+      input: {},
+      output: {},
+    },
   };
 
-  // Note: These parameters are NOT supported in session.update for gpt-realtime:
-  // - temperature (only per-response)
-  // - max_response_output_tokens (only per-response)
-  // - input_audio_transcription (configured via URL or not supported)
+  // === AUDIO INPUT CONFIG ===
 
   // Turn detection / VAD configuration
-  // This overrides the URL parameter with detailed settings
   const vadType = cfg.vadType || 'semantic_vad';
   if (vadType === 'disabled' || vadType === 'none') {
-    sessionConfig.turn_detection = null; // Disable turn detection (manual mode)
+    sessionConfig.audio.input.turn_detection = null;
   } else if (vadType === 'semantic_vad') {
-    sessionConfig.turn_detection = {
-      type: 'semantic_vad',
-    };
-    // Add eagerness if provided (low, medium, high, auto)
+    const turnDetection = { type: 'semantic_vad' };
     if (cfg.vadConfig?.eagerness) {
-      sessionConfig.turn_detection.eagerness = cfg.vadConfig.eagerness;
+      turnDetection.eagerness = cfg.vadConfig.eagerness;
     }
-    // Add create_response setting
     if (cfg.vadConfig?.createResponse !== undefined) {
-      sessionConfig.turn_detection.create_response = cfg.vadConfig.createResponse;
+      turnDetection.create_response = cfg.vadConfig.createResponse;
     }
-    // Add interrupt_response setting
     if (cfg.vadConfig?.interruptResponse !== undefined) {
-      sessionConfig.turn_detection.interrupt_response = cfg.vadConfig.interruptResponse;
+      turnDetection.interrupt_response = cfg.vadConfig.interruptResponse;
     }
+    sessionConfig.audio.input.turn_detection = turnDetection;
   } else if (vadType === 'server_vad') {
-    sessionConfig.turn_detection = {
-      type: 'server_vad',
-    };
-    // Add server VAD specific settings
+    const turnDetection = { type: 'server_vad' };
     if (cfg.vadConfig?.threshold !== undefined) {
-      sessionConfig.turn_detection.threshold = cfg.vadConfig.threshold;
+      turnDetection.threshold = cfg.vadConfig.threshold;
     }
     if (cfg.vadConfig?.prefixPaddingMs !== undefined) {
-      sessionConfig.turn_detection.prefix_padding_ms = cfg.vadConfig.prefixPaddingMs;
+      turnDetection.prefix_padding_ms = cfg.vadConfig.prefixPaddingMs;
     }
     if (cfg.vadConfig?.silenceDurationMs !== undefined) {
-      sessionConfig.turn_detection.silence_duration_ms = cfg.vadConfig.silenceDurationMs;
+      turnDetection.silence_duration_ms = cfg.vadConfig.silenceDurationMs;
     }
-    // Add create_response setting
     if (cfg.vadConfig?.createResponse !== undefined) {
-      sessionConfig.turn_detection.create_response = cfg.vadConfig.createResponse;
+      turnDetection.create_response = cfg.vadConfig.createResponse;
     }
-    // Add interrupt_response setting
     if (cfg.vadConfig?.interruptResponse !== undefined) {
-      sessionConfig.turn_detection.interrupt_response = cfg.vadConfig.interruptResponse;
+      turnDetection.interrupt_response = cfg.vadConfig.interruptResponse;
     }
+    sessionConfig.audio.input.turn_detection = turnDetection;
   }
 
-  // Note: output_audio_speed and input_audio_noise_reduction are not currently
-  // supported in the Realtime API session.update - these may be added in future versions
+  // === AUDIO OUTPUT CONFIG ===
+
+  // Voice (marin, cedar, alloy, echo, shimmer, ash, ballad, coral, sage, verse)
+  if (cfg.voice) {
+    sessionConfig.audio.output.voice = cfg.voice;
+  }
+
+  // Voice speed (1.0 is normal)
+  if (cfg.voiceSpeed !== undefined && cfg.voiceSpeed !== 1.0) {
+    sessionConfig.audio.output.speed = cfg.voiceSpeed;
+  }
 
   return sessionConfig;
 }
