@@ -186,7 +186,13 @@ struct ActiveCallView: View {
 
     private func endCall() {
         Task {
-            appState.endCall()
+            do {
+                try await container.callManager.endCall()
+            } catch {
+                print("[ActiveCallView] Error ending call: \(error)")
+                // Still update UI state even if API call fails
+                appState.endCall()
+            }
         }
     }
 

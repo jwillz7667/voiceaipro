@@ -127,30 +127,109 @@ struct CallHistoryView: View {
 
     /// Sync call history from server to local SwiftData
     private func syncCallHistory() async {
-        guard !isLoading else { return }
+        print("📱 [CallHistoryView] ========== SYNC STARTED ==========")
+        print("📱 [CallHistoryView] Current @Query count: \(calls.count)")
+        print("📱 [CallHistoryView] DataManager exists: \(container.dataManager != nil)")
+        print("📱 [CallHistoryView] ModelContext: \(modelContext)")
+
+        guard !isLoading else {
+            print("📱 [CallHistoryView] Already loading, skipping")
+            return
+        }
         isLoading = true
         syncError = nil
 
         do {
             // container.apiClient returns [[String: Any]] - parse each dict to CallHistoryItem
+            print("📱 [CallHistoryView] Fetching from API...")
             let serverCalls = try await container.apiClient.getCallHistory(limit: 100, offset: 0)
+            print("📱 [CallHistoryView] API returned \(serverCalls.count) calls")
+
+            if serverCalls.isEmpty {
+                print("📱 [CallHistoryView] ⚠️ Server returned EMPTY calls array")
+                isLoading = false
+                return
+            }
+
+            // Debug: print first call to see structure
+            if let first = serverCalls.first {
+                print("📱 [CallHistoryView] First call keys: \(first.keys.sorted())")
+                print("📱 [CallHistoryView] First call data: \(first)")
+            }
 
             var historyItems: [CallHistoryItem] = []
-            for callData in serverCalls {
+            var parseFailures: [(index: Int, reason: String)] = []
+
+            for (index, callData) in serverCalls.enumerated() {
                 if let item = CallHistoryItem(from: callData) {
                     historyItems.append(item)
+                } else {
+                    // Debug why parsing failed
+                    let id = callData["id"]
+                    let callSid = callData["call_sid"]
+                    let direction = callData["direction"]
+                    let phoneNumber = callData["phone_number"]
+                    let status = callData["status"]
+                    let startedAt = callData["started_at"]
+
+                    var missing: [String] = []
+                    if id == nil { missing.append("id") }
+                    if callSid == nil { missing.append("call_sid") }
+                    if direction == nil { missing.append("direction") }
+                    if phoneNumber == nil { missing.append("phone_number") }
+                    if status == nil { missing.append("status") }
+                    if startedAt == nil { missing.append("started_at") }
+
+                    let reason = missing.isEmpty ? "date parse failed" : "missing: \(missing.joined(separator: ", "))"
+                    parseFailures.append((index, reason))
+                    print("📱 [CallHistoryView] ❌ [\(index)] Parse failed: \(reason)")
                 }
             }
 
+            print("📱 [CallHistoryView] Parsed \(historyItems.count)/\(serverCalls.count) items")
+            if !parseFailures.isEmpty {
+                print("📱 [CallHistoryView] ⚠️ \(parseFailures.count) parse failures")
+            }
+
             // Sync parsed items to SwiftData
-            try await container.dataManager?.syncCallHistory(with: historyItems)
+            if let dm = container.dataManager {
+                print("📱 [CallHistoryView] Syncing \(historyItems.count) items to DataManager...")
+                try await dm.syncCallHistory(with: historyItems)
+                print("📱 [CallHistoryView] ✅ Sync complete!")
+            } else {
+                print("📱 [CallHistoryView] ❌ DataManager is nil! Falling back to direct insert...")
+
+                // Fallback: insert directly into modelContext
+                var insertedCount = 0
+                for item in historyItems {
+                    // Check if exists
+                    let itemId = item.id
+                    let fetchDescriptor = FetchDescriptor<CallRecord>(
+                        predicate: #Predicate { $0.id == itemId }
+                    )
+                    let exists = (try? modelContext.fetchCount(fetchDescriptor)) ?? 0 > 0
+
+                    if !exists {
+                        let record = CallRecord(from: item)
+                        modelContext.insert(record)
+                        insertedCount += 1
+                    }
+                }
+
+                if insertedCount > 0 {
+                    try modelContext.save()
+                    print("📱 [CallHistoryView] ✅ Fallback insert: \(insertedCount) records")
+                }
+            }
 
         } catch {
             syncError = error.localizedDescription
-            print("❌ CallHistory sync error: \(error)")
+            print("📱 [CallHistoryView] ❌ ERROR: \(error)")
         }
 
         isLoading = false
+        print("📱 [CallHistoryView] Post-sync @Query count: \(calls.count)")
+        print("📱 [CallHistoryView] ========== SYNC COMPLETE ==========")
     }
 
     private var groupedCalls: [Date: [CallRecord]] {

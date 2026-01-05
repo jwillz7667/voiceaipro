@@ -377,7 +377,11 @@ function sendSessionConfig(session) {
  */
 function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update
+  // See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
   const sessionConfig = {
+    // Required: Session type - 'realtime' for speech-to-speech, 'transcription' for transcription-only
+    type: 'realtime',
+
     // Instructions from iOS app, or default if empty/not provided
     instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
   };
