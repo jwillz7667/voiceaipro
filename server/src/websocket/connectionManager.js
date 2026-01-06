@@ -325,8 +325,20 @@ class ConnectionManager {
 
   createSession(callSid, options = {}) {
     if (this.sessions.has(callSid)) {
-      logger.warn('Session already exists, returning existing', { callSid });
-      return this.sessions.get(callSid);
+      // Session already exists - update config if provided (handles race condition)
+      // This can happen when twilioMediaHandler creates session before twilioService returns
+      const existingSession = this.sessions.get(callSid);
+      if (options.config) {
+        logger.info('Session already exists, updating config', {
+          callSid,
+          existingInstructions: existingSession.config.instructions?.length || 0,
+          newInstructions: options.config.instructions?.length || 0,
+        });
+        existingSession.updateConfig(options.config);
+      } else {
+        logger.warn('Session already exists, returning existing', { callSid });
+      }
+      return existingSession;
     }
 
     const session = new CallSession(callSid, options);
