@@ -42,6 +42,18 @@ router.get('/', async (req, res) => {
   try {
     const { user_id, include_default = 'true' } = req.query;
 
+    // Look up actual user UUID from device_id if provided
+    let actualUserId = null;
+    if (user_id) {
+      const userResult = await query(
+        'SELECT id FROM users WHERE device_id = $1 OR id::text = $1',
+        [user_id]
+      );
+      if (userResult.rows.length > 0) {
+        actualUserId = userResult.rows[0].id;
+      }
+    }
+
     let queryText = `
       SELECT id, user_id, name, instructions, voice, vad_config,
              is_default, created_at, updated_at
@@ -51,13 +63,16 @@ router.get('/', async (req, res) => {
     const params = [];
     let paramIndex = 1;
 
-    if (user_id) {
+    if (actualUserId) {
       if (include_default === 'true') {
         queryText += ` AND (user_id = $${paramIndex++} OR is_default = true)`;
       } else {
         queryText += ` AND user_id = $${paramIndex++}`;
       }
-      params.push(user_id);
+      params.push(actualUserId);
+    } else if (user_id) {
+      // No user found, just return defaults
+      queryText += ' AND is_default = true';
     }
 
     queryText += ' ORDER BY is_default DESC, name ASC';
