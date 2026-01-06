@@ -14,7 +14,7 @@ const logger = createLogger('routes:prompts');
 async function ensureUserExists(deviceId) {
   if (!deviceId) return null;
 
-  // Try to find existing user
+  // Try to find existing user by device_id
   const existing = await query(
     'SELECT id FROM users WHERE device_id = $1',
     [deviceId]
@@ -24,14 +24,14 @@ async function ensureUserExists(deviceId) {
     return existing.rows[0].id;
   }
 
-  // Create new user with the device_id as both id and device_id
-  // This handles the case where iOS sends a UUID as user_id
+  // Create new user - use device_id as UUID if it's valid, otherwise generate new
+  const userId = uuidv4();
   const result = await query(
     `INSERT INTO users (id, device_id)
-     VALUES ($1, $1)
+     VALUES ($1::uuid, $2)
      ON CONFLICT (device_id) DO UPDATE SET last_active = CURRENT_TIMESTAMP
      RETURNING id`,
-    [deviceId]
+    [userId, deviceId]
   );
 
   logger.info('Created new user', { userId: result.rows[0].id, deviceId });
