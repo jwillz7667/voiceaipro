@@ -281,6 +281,46 @@ class ConnectionManager {
     this.sessions = new Map();
     this.iosClients = new Map();
     this.eventSubscribers = new Map();
+    // Pending configs for outbound calls (stored before callSid is known)
+    // Key: configId (short UUID), Value: { config, createdAt }
+    this.pendingConfigs = new Map();
+  }
+
+  /**
+   * Store a config temporarily before a call is initiated
+   * Returns a short ID that can be passed in URL params (avoids 4000 char limit)
+   */
+  storePendingConfig(config) {
+    const configId = uuidv4().substring(0, 8); // Short 8-char ID
+    this.pendingConfigs.set(configId, {
+      config,
+      createdAt: Date.now(),
+    });
+    logger.debug('Stored pending config', { configId, instructionsLength: config?.instructions?.length || 0 });
+
+    // Clean up old pending configs after 5 minutes
+    setTimeout(() => {
+      if (this.pendingConfigs.has(configId)) {
+        this.pendingConfigs.delete(configId);
+        logger.debug('Cleaned up expired pending config', { configId });
+      }
+    }, 5 * 60 * 1000);
+
+    return configId;
+  }
+
+  /**
+   * Retrieve and consume a pending config by ID
+   */
+  getPendingConfig(configId) {
+    const pending = this.pendingConfigs.get(configId);
+    if (pending) {
+      this.pendingConfigs.delete(configId);
+      logger.debug('Retrieved pending config', { configId, age: Date.now() - pending.createdAt });
+      return pending.config;
+    }
+    logger.warn('Pending config not found', { configId });
+    return null;
   }
 
   createSession(callSid, options = {}) {

@@ -18,15 +18,15 @@ router.post('/outgoing', (req, res) => {
     userId,
     promptId,
     PromptId,  // iOS sends as PromptId
-    Config,    // Config JSON from URL params (passed by twilioService)
+    configId,  // Reference ID to retrieve config from server-side store
     direction = 'outbound',
   } = req.body;
 
   // Use PromptId (from iOS) or promptId
   const effectivePromptId = PromptId || promptId;
 
-  // Config can come from body (URL params forwarded by Twilio) or query string
-  const effectiveConfig = Config || req.query.Config;
+  // configId can come from body (URL params forwarded by Twilio) or query string
+  const effectiveConfigId = configId || req.query.configId;
 
   logger.info('Outgoing call TwiML requested', {
     to: To,
@@ -34,25 +34,30 @@ router.post('/outgoing', (req, res) => {
     callSid: CallSid,
     userId,
     promptId: effectivePromptId,
-    hasConfig: !!effectiveConfig,
-    configLength: effectiveConfig?.length || 0,
-    configSource: Config ? 'body' : (req.query.Config ? 'query' : 'none'),
+    configId: effectiveConfigId,
   });
 
-  // Parse and log config details for debugging
-  if (effectiveConfig) {
-    try {
-      const parsedConfig = JSON.parse(effectiveConfig);
-      logger.info('TwiML parsed config', {
+  // Retrieve config from server-side pending store using configId
+  // This avoids passing large config JSON in URL (Twilio 4000 char limit)
+  let configJson = null;
+  if (effectiveConfigId) {
+    const retrievedConfig = connectionManager.getPendingConfig(effectiveConfigId);
+    if (retrievedConfig) {
+      configJson = JSON.stringify(retrievedConfig);
+      logger.info('TwiML retrieved config from pending store', {
         callSid: CallSid,
-        voice: parsedConfig.voice,
-        model: parsedConfig.model,
-        vadType: parsedConfig.vadType,
-        instructionsLength: parsedConfig.instructions?.length || 0,
-        instructionsPreview: parsedConfig.instructions?.substring(0, 50) || '(none)',
+        configId: effectiveConfigId,
+        voice: retrievedConfig.voice,
+        model: retrievedConfig.model,
+        vadType: retrievedConfig.vadType,
+        instructionsLength: retrievedConfig.instructions?.length || 0,
+        instructionsPreview: retrievedConfig.instructions?.substring(0, 50) || '(none)',
       });
-    } catch (e) {
-      logger.warn('Failed to parse config JSON in TwiML', { error: e.message });
+    } else {
+      logger.warn('Config not found in pending store', {
+        callSid: CallSid,
+        configId: effectiveConfigId,
+      });
     }
   }
 
@@ -73,12 +78,12 @@ router.post('/outgoing', (req, res) => {
   if (effectivePromptId) {
     stream.parameter({ name: 'promptId', value: effectivePromptId });
   }
-  // Pass the config JSON to the media stream (from twilioService or iOS)
-  if (effectiveConfig) {
-    stream.parameter({ name: 'config', value: effectiveConfig });
+  // Pass the config JSON to the media stream (retrieved from server-side store)
+  if (configJson) {
+    stream.parameter({ name: 'config', value: configJson });
     logger.debug('Passing config to media stream', {
       callSid: CallSid,
-      configLength: effectiveConfig.length,
+      configLength: configJson.length,
     });
   }
 

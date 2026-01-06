@@ -63,13 +63,13 @@ export async function initiateOutgoingCall(options) {
   if (promptId) twimlParams.set('promptId', promptId);
   twimlParams.set('direction', 'outbound');
 
-  // Pass the iOS config as a URL parameter so TwiML can forward it to the media stream
-  // This ensures config is available even if there's a race condition with session creation
+  // Store config server-side and pass only the reference ID in URL
+  // This avoids Twilio's 4000 character URL limit for long instructions
   if (finalConfig) {
-    const configJson = JSON.stringify(finalConfig);
-    twimlParams.set('Config', configJson);
-    logger.info('Passing config to TwiML', {
-      configLength: configJson.length,
+    const configId = connectionManager.storePendingConfig(finalConfig);
+    twimlParams.set('configId', configId);
+    logger.info('Stored config for TwiML retrieval', {
+      configId,
       instructionsLength: finalConfig.instructions?.length || 0,
       voice: finalConfig.voice,
     });
