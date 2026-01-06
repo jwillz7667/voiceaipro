@@ -75,22 +75,85 @@ iOS App ←→ Twilio Voice SDK ←→ Twilio Cloud (PSTN)
 - **db/** - PostgreSQL queries and migrations
 - **audio/** - μ-law ↔ PCM16 conversion
 
+## iOS Config Flow to OpenAI
+
+The iOS app sends custom instructions and parameters that flow through to OpenAI:
+
+```
+iOS App (RealtimeConfig)
+    ↓ toAPIParams() → JSON
+twilioService.initiateOutgoingCall()
+    ↓ storePendingConfig() → configId (8 chars)
+Twilio API call with ?configId=xxx
+    ↓
+/twiml/outgoing → stream.parameter('configId')
+    ↓
+twilioMediaHandler → getPendingConfig(configId)
+    ↓ Full config retrieved
+connectionManager.createSession(config)
+    ↓
+openaiRealtimeHandler.buildSessionConfig()
+    ↓
+OpenAI session.update with instructions, voice, VAD
+```
+
+**Key files:**
+- `VoiceAIPro/Core/Models/RealtimeConfig.swift` - iOS config model with `toAPIParams()`
+- `server/src/services/twilioService.js` - Stores config, passes configId in URL
+- `server/src/routes/twiml.js` - Passes configId to stream (255 char limit per param)
+- `server/src/websocket/twilioMediaHandler.js` - Retrieves config by configId
+- `server/src/websocket/openaiRealtimeHandler.js` - Builds GA session.update
+
+**Important:** Twilio stream parameters are limited to 255 chars each. Config is stored server-side and retrieved by short configId.
+
+## OpenAI Realtime API (GA - August 2025)
+
+Using `gpt-realtime` model with GA format. Beta API deprecated Feb 27, 2026.
+
+**Session update format:**
+```javascript
+{
+  type: 'session.update',
+  session: {
+    type: 'realtime',
+    instructions: '...',
+    output_modalities: ['audio'],
+    audio: {
+      input: {
+        turn_detection: { type: 'semantic_vad', eagerness: 'high' },
+        transcription: { model: 'gpt-4o-transcribe' }
+      },
+      output: { voice: 'marin', speed: 1.0 }
+    }
+  }
+}
+```
+
+**GA changes from beta:**
+- `temperature` removed (not configurable)
+- `maxOutputTokens` not in session.update
+- Nested `audio.input` / `audio.output` structure
+- `type: 'realtime'` required
+
 ## Key Configuration Points
 
 ### AI Instructions & Voice
-Edit `server/src/websocket/openaiRealtimeHandler.js`:
+Default instructions in `server/src/websocket/openaiRealtimeHandler.js`:
 ```javascript
 function getDefaultInstructions() {
   return `Your custom AI instructions here...`;
 }
 ```
+**Note:** iOS app can override with custom instructions via RealtimeConfig.
 
 ### VAD (Voice Activity Detection)
-Edit `server/src/websocket/connectionManager.js`:
+Default in `server/src/websocket/connectionManager.js`:
 ```javascript
-vadType: 'semantic_vad',  // or 'server_vad'
+vadType: 'semantic_vad',  // or 'server_vad', 'disabled'
 vadConfig: {
   eagerness: 'high',      // 'low', 'medium', 'high', 'auto'
+  createResponse: true,
+  interruptResponse: true
 }
 ```
 
