@@ -268,7 +268,7 @@ class APIClient: APIClientProtocol {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        var body: [String: Any] = [
+        let body: [String: Any] = [
             "to": to,
             "device_id": deviceId,
             "config": config.toAPIParams()
@@ -665,3 +665,4 @@ enum APIError: LocalizedError {
         }
     }
 }
+
