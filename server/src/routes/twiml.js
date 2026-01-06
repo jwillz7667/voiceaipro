@@ -37,28 +37,13 @@ router.post('/outgoing', (req, res) => {
     configId: effectiveConfigId,
   });
 
-  // Retrieve config from server-side pending store using configId
-  // This avoids passing large config JSON in URL (Twilio 4000 char limit)
-  let configJson = null;
+  // Log configId - config will be retrieved by twilioMediaHandler
+  // We pass only configId in stream params (Twilio limits params to 255 chars each)
   if (effectiveConfigId) {
-    const retrievedConfig = connectionManager.getPendingConfig(effectiveConfigId);
-    if (retrievedConfig) {
-      configJson = JSON.stringify(retrievedConfig);
-      logger.info('TwiML retrieved config from pending store', {
-        callSid: CallSid,
-        configId: effectiveConfigId,
-        voice: retrievedConfig.voice,
-        model: retrievedConfig.model,
-        vadType: retrievedConfig.vadType,
-        instructionsLength: retrievedConfig.instructions?.length || 0,
-        instructionsPreview: retrievedConfig.instructions?.substring(0, 50) || '(none)',
-      });
-    } else {
-      logger.warn('Config not found in pending store', {
-        callSid: CallSid,
-        configId: effectiveConfigId,
-      });
-    }
+    logger.info('TwiML passing configId to media stream', {
+      callSid: CallSid,
+      configId: effectiveConfigId,
+    });
   }
 
   const response = new VoiceResponse();
@@ -78,13 +63,10 @@ router.post('/outgoing', (req, res) => {
   if (effectivePromptId) {
     stream.parameter({ name: 'promptId', value: effectivePromptId });
   }
-  // Pass the config JSON to the media stream (retrieved from server-side store)
-  if (configJson) {
-    stream.parameter({ name: 'config', value: configJson });
-    logger.debug('Passing config to media stream', {
-      callSid: CallSid,
-      configLength: configJson.length,
-    });
+  // Pass only configId to stream (Twilio limits params to 255 chars)
+  // twilioMediaHandler will retrieve full config from pending store
+  if (effectiveConfigId) {
+    stream.parameter({ name: 'configId', value: effectiveConfigId });
   }
 
   res.type('text/xml');

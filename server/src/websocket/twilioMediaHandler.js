@@ -280,31 +280,33 @@ export function handleTwilioMediaStream(ws, request) {
       userId: customParameters.userId,
     });
 
-    // Parse config from custom parameters (passed through TwiML from twilioService)
+    // Retrieve config from pending store using configId
+    // Config is stored by twilioService before call, configId passed in stream params
+    // (Twilio stream params limited to 255 chars, so we pass ID not full config)
     let streamConfig = null;
-    if (customParameters.config) {
-      try {
-        streamConfig = JSON.parse(customParameters.config);
-        logger.info('📋 [CONFIG] Parsed config from stream parameters', {
+    const configId = customParameters.configId;
+    if (configId) {
+      streamConfig = connectionManager.getPendingConfig(configId);
+      if (streamConfig) {
+        logger.info('📋 [CONFIG] Retrieved config from pending store', {
           callSid,
+          configId,
           hasInstructions: !!streamConfig.instructions,
           instructionsLength: streamConfig.instructions?.length || 0,
           instructionsPreview: streamConfig.instructions?.substring(0, 80) || '(empty)',
           voice: streamConfig.voice,
           model: streamConfig.model,
-          vadType: streamConfig.vadConfig?.type || streamConfig.vadType,
+          vadType: streamConfig.vadType,
           voiceSpeed: streamConfig.voiceSpeed,
-          temperature: streamConfig.temperature,
         });
-      } catch (e) {
-        logger.error('📋 [CONFIG] Failed to parse config JSON from stream', {
+      } else {
+        logger.error('📋 [CONFIG] Config not found in pending store', {
           callSid,
-          error: e.message,
-          configPreview: customParameters.config?.substring(0, 100),
+          configId,
         });
       }
     } else {
-      logger.warn('📋 [CONFIG] No config in stream parameters', { callSid });
+      logger.warn('📋 [CONFIG] No configId in stream parameters', { callSid });
     }
 
     // Create or retrieve session
