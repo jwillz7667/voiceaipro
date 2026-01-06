@@ -6,6 +6,38 @@ import { query, transaction } from '../db/pool.js';
 const router = Router();
 const logger = createLogger('routes:prompts');
 
+/**
+ * Ensure a user exists in the database, creating them if needed
+ * @param {string} deviceId - The device ID from the iOS app
+ * @returns {Promise<string>} The user's UUID
+ */
+async function ensureUserExists(deviceId) {
+  if (!deviceId) return null;
+
+  // Try to find existing user
+  const existing = await query(
+    'SELECT id FROM users WHERE device_id = $1',
+    [deviceId]
+  );
+
+  if (existing.rows.length > 0) {
+    return existing.rows[0].id;
+  }
+
+  // Create new user with the device_id as both id and device_id
+  // This handles the case where iOS sends a UUID as user_id
+  const result = await query(
+    `INSERT INTO users (id, device_id)
+     VALUES ($1, $1)
+     ON CONFLICT (device_id) DO UPDATE SET last_active = CURRENT_TIMESTAMP
+     RETURNING id`,
+    [deviceId]
+  );
+
+  logger.info('Created new user', { userId: result.rows[0].id, deviceId });
+  return result.rows[0].id;
+}
+
 router.get('/', async (req, res) => {
   try {
     const { user_id, include_default = 'true' } = req.query;
@@ -124,13 +156,16 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Ensure user exists if user_id is provided
+    const validUserId = user_id ? await ensureUserExists(user_id) : null;
+
     const id = uuidv4();
 
     const result = await query(
       `INSERT INTO prompts (id, user_id, name, instructions, voice, vad_config, is_default)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id, user_id, name, instructions, voice, vad_config, is_default, created_at, updated_at`,
-      [id, user_id || null, name, instructions, voice, vad_config || null, is_default]
+      [id, validUserId, name, instructions, voice, vad_config || null, is_default]
     );
 
     const row = result.rows[0];
