@@ -8,21 +8,18 @@ struct TranscriptsView: View {
 
     @State private var selectedCall: CallRecord?
     @State private var searchText = ""
+    @State private var isRefreshing = false
 
-    private var callsWithTranscripts: [CallRecord] {
-        calls.filter { call in
-            guard let callSid = call.callSid else { return false }
-            let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
-            let transcripts = (try? modelContext.fetch(descriptor)) ?? []
-            return !transcripts.isEmpty
-        }
+    /// All calls - we'll show all completed calls and let user tap to load transcripts
+    private var completedCalls: [CallRecord] {
+        calls.filter { $0.callSid != nil && $0.status == "completed" }
     }
 
     private var filteredCalls: [CallRecord] {
         if searchText.isEmpty {
-            return callsWithTranscripts
+            return completedCalls
         }
-        return callsWithTranscripts.filter { call in
+        return completedCalls.filter { call in
             call.phoneNumber.localizedCaseInsensitiveContains(searchText)
         }
     }
@@ -30,7 +27,7 @@ struct TranscriptsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if callsWithTranscripts.isEmpty {
+                if completedCalls.isEmpty {
                     emptyState
                 } else {
                     List {
@@ -44,6 +41,9 @@ struct TranscriptsView: View {
                     }
                     .listStyle(.insetGrouped)
                     .searchable(text: $searchText, prompt: "Search calls")
+                    .refreshable {
+                        await refreshCallHistory()
+                    }
                 }
             }
             .navigationTitle("Transcripts")
@@ -51,15 +51,59 @@ struct TranscriptsView: View {
             .sheet(item: $selectedCall) { call in
                 TranscriptDetailView(call: call)
             }
+            .task {
+                await refreshCallHistory()
+            }
         }
     }
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No Transcripts Yet",
+            "No Calls Yet",
             systemImage: "text.bubble",
-            description: Text("Transcripts from your calls will appear here")
+            description: Text("Complete a call to see transcripts here")
         )
+    }
+
+    /// Refresh call history from server
+    private func refreshCallHistory() async {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+
+        do {
+            // APIClientProtocol returns [[String: Any]]
+            let serverCalls = try await DIContainer.shared.apiClient.getCallHistory(limit: 50, offset: 0)
+
+            await MainActor.run {
+                for callData in serverCalls {
+                    // Parse the dictionary to CallHistoryItem
+                    guard let item = CallHistoryItem(from: callData) else { continue }
+
+                    let serverCallSid = item.callSid
+
+                    // Check if call already exists locally
+                    let descriptor = FetchDescriptor<CallRecord>(
+                        predicate: #Predicate { record in
+                            record.callSid == serverCallSid
+                        }
+                    )
+                    let existing = try? modelContext.fetch(descriptor)
+
+                    if existing?.isEmpty ?? true {
+                        // Use convenience initializer which handles all fields
+                        let record = CallRecord(from: item)
+                        modelContext.insert(record)
+                    }
+                }
+
+                try? modelContext.save()
+                isRefreshing = false
+            }
+        } catch {
+            await MainActor.run {
+                isRefreshing = false
+            }
+        }
     }
 }
 
@@ -168,6 +212,8 @@ struct TranscriptDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @State private var transcripts: [TranscriptEntry] = []
+    @State private var isLoading = false
+    @State private var errorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -192,13 +238,38 @@ struct TranscriptDetailView: View {
 
                     Divider()
 
-                    // Transcripts
-                    if transcripts.isEmpty {
+                    // Loading state
+                    if isLoading {
+                        ProgressView("Loading transcripts...")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 40)
+                    }
+                    // Error state
+                    else if let error = errorMessage {
+                        VStack(spacing: 12) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.largeTitle)
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                            Button("Retry") {
+                                Task { await fetchTranscripts() }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 40)
+                    }
+                    // Empty state
+                    else if transcripts.isEmpty {
                         Text("No transcripts available")
                             .foregroundColor(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 40)
-                    } else {
+                    }
+                    // Transcripts list
+                    else {
                         ForEach(transcripts) { transcript in
                             TranscriptBubbleView(transcript: transcript)
                         }
@@ -225,13 +296,69 @@ struct TranscriptDetailView: View {
                     }
                 }
             }
-            .onAppear {
-                loadTranscripts()
+            .task {
+                await fetchTranscripts()
             }
         }
     }
 
-    private func loadTranscripts() {
+    /// Fetch transcripts from server and save to local SwiftData
+    private func fetchTranscripts() async {
+        guard let callSid = call.callSid else {
+            errorMessage = "No call ID available"
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        do {
+            // Fetch full call details which includes transcripts
+            let response = try await DIContainer.shared.apiClient.getFullCallDetails(callSid: callSid)
+
+            // Convert and save to SwiftData
+            await MainActor.run {
+                if let serverTranscripts = response.transcripts {
+                    for serverTranscript in serverTranscripts {
+                        let transcriptId = serverTranscript.id
+
+                        // Check if already exists
+                        let descriptor = FetchDescriptor<TranscriptEntry>(
+                            predicate: #Predicate { entry in
+                                entry.id == transcriptId
+                            }
+                        )
+                        let existing = try? modelContext.fetch(descriptor)
+
+                        if existing?.isEmpty ?? true {
+                            // Create new entry
+                            let entry = serverTranscript.toTranscriptEntry(callSid: callSid)
+                            modelContext.insert(entry)
+                        }
+                    }
+
+                    // Save context
+                    try? modelContext.save()
+                }
+
+                // Load from local storage (now populated)
+                loadLocalTranscripts()
+                isLoading = false
+            }
+        } catch {
+            await MainActor.run {
+                // Try loading from local cache on error
+                loadLocalTranscripts()
+                if transcripts.isEmpty {
+                    errorMessage = "Failed to load transcripts: \(error.localizedDescription)"
+                }
+                isLoading = false
+            }
+        }
+    }
+
+    /// Load transcripts from local SwiftData
+    private func loadLocalTranscripts() {
         guard let callSid = call.callSid else { return }
         let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
         transcripts = (try? modelContext.fetch(descriptor)) ?? []
