@@ -17,6 +17,9 @@ struct HomeView: View {
                     // Connection status
                     ConnectionStatusCard()
 
+                    // AI Prompt selector
+                    PromptSelectorCard()
+
                     // Dialer
                     DialerCard(phoneNumber: $phoneNumber) {
                         initiateCall()

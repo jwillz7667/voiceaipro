@@ -13,6 +13,10 @@ struct CallDetailView: View {
     @State private var transcripts: [TranscriptEntry] = []
     @State private var showFullTranscript = false
     @State private var isLoadingTranscripts = false
+    @State private var callConfig: RealtimeConfig?
+    @State private var showFullInstructions = false
+    @State private var recordings: [ServerRecordingEntry] = []
+    @State private var isLoadingRecordings = false
 
     var body: some View {
         NavigationStack {
@@ -91,6 +95,97 @@ struct CallDetailView: View {
                     }
                 } header: {
                     Text("Call Details")
+                }
+
+                // Configuration section
+                if let config = callConfig ?? call.decodedConfig {
+                    Section {
+                        DetailRow(
+                            icon: "waveform.circle",
+                            label: "Voice",
+                            value: config.voice.displayName
+                        )
+
+                        DetailRow(
+                            icon: "mic.badge.waveform",
+                            label: "Turn Detection",
+                            value: vadDisplayName(config.vadConfig)
+                        )
+
+                        if let noiseReduction = config.noiseReduction {
+                            DetailRow(
+                                icon: "waveform.path.ecg",
+                                label: "Noise Reduction",
+                                value: noiseReduction.displayName
+                            )
+                        }
+
+                        DetailRow(
+                            icon: "cpu",
+                            label: "Model",
+                            value: config.model.rawValue
+                        )
+                    } header: {
+                        Text("Configuration Used")
+                    }
+
+                    // Instructions section
+                    if !config.instructions.isEmpty {
+                        Section {
+                            Button {
+                                showFullInstructions = true
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(config.instructions)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.primary)
+                                        .lineLimit(3)
+                                        .multilineTextAlignment(.leading)
+
+                                    Text("Tap to view full instructions")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.blue)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        } header: {
+                            HStack {
+                                Text("Instructions")
+                                Spacer()
+                                Text("\(config.instructions.count) chars")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                }
+
+                // Recording section
+                if !recordings.isEmpty {
+                    Section {
+                        ForEach(recordings) { recording in
+                            CallDetailRecordingRow(recording: recording)
+                        }
+                    } header: {
+                        HStack {
+                            Text("Recording")
+                            Spacer()
+                            Text("\(recordings.count) file(s)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                } else if isLoadingRecordings {
+                    Section {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding()
+                            Spacer()
+                        }
+                    } header: {
+                        Text("Recording")
+                    }
                 }
 
                 // Transcript section
@@ -182,46 +277,60 @@ struct CallDetailView: View {
             .sheet(isPresented: $showFullTranscript) {
                 FullTranscriptView(transcripts: transcripts, phoneNumber: formattedPhoneNumber)
             }
-            .onAppear {
-                loadTranscripts()
+            .sheet(isPresented: $showFullInstructions) {
+                if let config = callConfig ?? call.decodedConfig {
+                    FullInstructionsView(instructions: config.instructions)
+                }
+            }
+            .task {
+                await loadCallData()
             }
         }
     }
 
-    private func loadTranscripts() {
+    /// Load all call data: config, transcripts, and recordings
+    private func loadCallData() async {
         guard let callSid = call.callSid else { return }
 
-        // First check local storage
-        let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
-        let localTranscripts = (try? modelContext.fetch(descriptor)) ?? []
-
-        if !localTranscripts.isEmpty {
-            transcripts = localTranscripts
-            return
+        // Load local config first
+        if let decodedConfig = call.decodedConfig {
+            callConfig = decodedConfig
         }
 
-        // If no local transcripts, fetch from server
-        fetchTranscriptsFromServer(callSid: callSid)
+        // Load local transcripts
+        let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
+        let localTranscripts = (try? modelContext.fetch(descriptor)) ?? []
+        if !localTranscripts.isEmpty {
+            transcripts = localTranscripts
+        }
+
+        // Fetch full details from server
+        await fetchFullCallDetails(callSid: callSid)
     }
 
-    private func fetchTranscriptsFromServer(callSid: String) {
-        isLoadingTranscripts = true
+    /// Fetch full call details from server including config, transcripts, recordings
+    private func fetchFullCallDetails(callSid: String) async {
+        isLoadingTranscripts = transcripts.isEmpty
+        isLoadingRecordings = true
 
-        Task {
-            do {
-                print("📱 [CallDetailView] Fetching transcripts for: \(callSid)")
-                let response = try await container.apiClient.getFullCallDetails(callSid: callSid)
+        do {
+            print("📱 [CallDetailView] Fetching full details for: \(callSid)")
+            let response = try await container.apiClient.getFullCallDetails(callSid: callSid)
 
-                guard let serverTranscripts = response.transcripts, !serverTranscripts.isEmpty else {
-                    print("📱 [CallDetailView] No transcripts from server")
-                    await MainActor.run { isLoadingTranscripts = false }
-                    return
+            await MainActor.run {
+                // Update config from server response
+                if let serverConfig = response.call.config {
+                    // Try to decode the server config
+                    if let configData = try? JSONSerialization.data(withJSONObject: serverConfig.value),
+                       let decodedConfig = try? JSONDecoder().decode(RealtimeConfig.self, from: configData) {
+                        callConfig = decodedConfig
+                    }
                 }
 
-                print("📱 [CallDetailView] Got \(serverTranscripts.count) transcripts from server")
+                // Process transcripts
+                if let serverTranscripts = response.transcripts, !serverTranscripts.isEmpty {
+                    print("📱 [CallDetailView] Got \(serverTranscripts.count) transcripts from server")
 
-                // Convert and save to SwiftData
-                await MainActor.run {
                     for serverTranscript in serverTranscripts {
                         // Check if already exists
                         let existingDescriptor = FetchDescriptor<TranscriptEntry>(
@@ -240,13 +349,36 @@ struct CallDetailView: View {
                     // Reload local transcripts
                     let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
                     transcripts = (try? modelContext.fetch(descriptor)) ?? []
-                    isLoadingTranscripts = false
                     print("📱 [CallDetailView] Saved \(transcripts.count) transcripts locally")
                 }
-            } catch {
-                print("📱 [CallDetailView] Failed to fetch transcripts: \(error)")
-                await MainActor.run { isLoadingTranscripts = false }
+
+                // Process recordings
+                if let serverRecordings = response.recordings {
+                    recordings = serverRecordings
+                    print("📱 [CallDetailView] Got \(recordings.count) recordings")
+                }
+
+                isLoadingTranscripts = false
+                isLoadingRecordings = false
             }
+        } catch {
+            print("📱 [CallDetailView] Failed to fetch full details: \(error)")
+            await MainActor.run {
+                isLoadingTranscripts = false
+                isLoadingRecordings = false
+            }
+        }
+    }
+
+    /// Helper to format VAD config display name
+    private func vadDisplayName(_ vadConfig: VADConfig) -> String {
+        switch vadConfig {
+        case .serverVAD:
+            return "Server VAD"
+        case .semanticVAD(let params):
+            return "Semantic (\(params.eagerness.rawValue.capitalized))"
+        case .disabled:
+            return "Manual"
         }
     }
 
@@ -499,6 +631,124 @@ struct FullTranscriptView: View {
             text += "\(transcript.content)\n\n"
         }
         return text
+    }
+}
+
+/// Row displaying a recording entry in call detail view
+struct CallDetailRecordingRow: View {
+    let recording: ServerRecordingEntry
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Play button icon
+            ZStack {
+                Circle()
+                    .fill(Color.blue.opacity(0.15))
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(.blue)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                // Duration and size
+                HStack {
+                    if let duration = recording.durationSeconds {
+                        Text(formatDuration(duration))
+                            .font(.system(size: 15, weight: .medium))
+                    }
+
+                    if let size = recording.fileSizeBytes {
+                        Text("•")
+                            .foregroundColor(.secondary)
+                        Text(formatFileSize(size))
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                // Format info
+                HStack(spacing: 4) {
+                    if let format = recording.format {
+                        Text(format.uppercased())
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let sampleRate = recording.sampleRate {
+                        Text("•")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text("\(sampleRate / 1000)kHz")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+
+                    if let channels = recording.channels {
+                        Text("•")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                        Text(channels == 1 ? "Mono" : "Stereo")
+                            .font(.system(size: 12))
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            Spacer()
+
+            // Download indicator
+            Image(systemName: "arrow.down.circle")
+                .font(.system(size: 20))
+                .foregroundColor(.blue)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
+
+    private func formatFileSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+}
+
+/// Full instructions view sheet
+struct FullInstructionsView: View {
+    let instructions: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(instructions)
+                    .font(.system(size: 15))
+                    .foregroundColor(.primary)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .navigationTitle("Instructions")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarLeading) {
+                    ShareLink(item: instructions) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+        }
     }
 }
 

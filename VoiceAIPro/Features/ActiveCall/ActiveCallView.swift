@@ -185,11 +185,16 @@ struct ActiveCallView: View {
     }
 
     private func endCall() {
+        // Provide immediate haptic feedback
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
         Task {
             do {
                 try await container.callManager.endCall()
+                print("📞 [ActiveCallView] Call ended successfully")
             } catch {
-                print("[ActiveCallView] Error ending call: \(error)")
+                print("📞 [ActiveCallView] Error ending call: \(error)")
                 // Still update UI state even if API call fails
                 appState.endCall()
             }

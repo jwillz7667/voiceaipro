@@ -199,6 +199,9 @@ protocol APIClientProtocol {
     func getRecordings(limit: Int, offset: Int) async throws -> [[String: Any]]
     func downloadRecording(id: UUID) async throws -> URL
     func getPrompts() async throws -> [[String: Any]]
+    func getPromptsTyped() async throws -> [PromptDTO]
+    func createPrompt(name: String, instructions: String, voice: String, vadConfig: [String: Any]?) async throws -> PromptDTO
+    func updatePrompt(id: UUID, name: String?, instructions: String?, voice: String?, vadConfig: [String: Any]?) async throws -> PromptDTO
     func savePrompt(_ prompt: Prompt) async throws -> Prompt
     func deletePrompt(id: UUID) async throws
     func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse
@@ -381,7 +384,7 @@ class APIClient: APIClientProtocol {
     }
 
     func getPrompts() async throws -> [[String: Any]] {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?device_id=\(deviceId)") else {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?user_id=\(deviceId)") else {
             throw APIError.invalidURL
         }
 
@@ -400,6 +403,95 @@ class APIClient: APIClientProtocol {
         return prompts
     }
 
+    func getPromptsTyped() async throws -> [PromptDTO] {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?user_id=\(deviceId)") else {
+            throw APIError.invalidURL
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let promptsResponse = try decoder.decode(PromptsResponse.self, from: data)
+        return promptsResponse.prompts
+    }
+
+    func createPrompt(name: String, instructions: String, voice: String, vadConfig: [String: Any]?) async throws -> PromptDTO {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [
+            "name": name,
+            "instructions": instructions,
+            "voice": voice,
+            "user_id": deviceId
+        ]
+
+        if let vadConfig = vadConfig {
+            body["vad_config"] = vadConfig
+        }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 || httpResponse.statusCode == 201 else {
+            throw APIError.serverError
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let promptResponse = try decoder.decode(PromptResponse.self, from: data)
+        return promptResponse.prompt
+    }
+
+    func updatePrompt(id: UUID, name: String?, instructions: String?, voice: String?, vadConfig: [String: Any]?) async throws -> PromptDTO {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)/\(id.uuidString)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        var body: [String: Any] = [:]
+        if let name = name { body["name"] = name }
+        if let instructions = instructions { body["instructions"] = instructions }
+        if let voice = voice { body["voice"] = voice }
+        if let vadConfig = vadConfig { body["vad_config"] = vadConfig }
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+
+        let promptResponse = try decoder.decode(PromptResponse.self, from: data)
+        return promptResponse.prompt
+    }
+
     func savePrompt(_ prompt: Prompt) async throws -> Prompt {
         guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)") else {
             throw APIError.invalidURL
@@ -414,7 +506,7 @@ class APIClient: APIClientProtocol {
             "instructions": prompt.instructions,
             "voice": prompt.voice.rawValue,
             "is_default": prompt.isDefault,
-            "device_id": deviceId
+            "user_id": deviceId
         ]
 
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -426,13 +518,12 @@ class APIClient: APIClientProtocol {
             throw APIError.serverError
         }
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let promptData = json["prompt"] as? [String: Any] else {
-            throw APIError.invalidResponse
-        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
-        // Parse response into Prompt
-        return prompt // Simplified - would parse server response
+        let promptResponse = try decoder.decode(PromptResponse.self, from: data)
+        return promptResponse.prompt.toPrompt()
     }
 
     func deletePrompt(id: UUID) async throws {
@@ -593,6 +684,38 @@ class MockAPIClient: APIClientProtocol {
 
     func getPrompts() async throws -> [[String: Any]] {
         return []
+    }
+
+    func getPromptsTyped() async throws -> [PromptDTO] {
+        return []
+    }
+
+    func createPrompt(name: String, instructions: String, voice: String, vadConfig: [String: Any]?) async throws -> PromptDTO {
+        return PromptDTO(
+            id: UUID(),
+            userId: nil,
+            name: name,
+            instructions: instructions,
+            voice: voice,
+            vadConfig: nil,
+            isDefault: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    }
+
+    func updatePrompt(id: UUID, name: String?, instructions: String?, voice: String?, vadConfig: [String: Any]?) async throws -> PromptDTO {
+        return PromptDTO(
+            id: id,
+            userId: nil,
+            name: name ?? "Updated Prompt",
+            instructions: instructions ?? "Updated instructions",
+            voice: voice ?? "marin",
+            vadConfig: nil,
+            isDefault: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
     }
 
     func savePrompt(_ prompt: Prompt) async throws -> Prompt {

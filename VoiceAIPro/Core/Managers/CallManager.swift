@@ -388,21 +388,53 @@ class CallManager: ObservableObject {
     func endCall() async throws {
         guard hasActiveCall else { return }
 
+        print("📞 [CallManager] Ending call...")
         callState = .disconnecting
 
-        // End via Twilio
-        twilioService.endCall()
-
-        // End via API if needed
+        // End via server API first (this tells Twilio to terminate the call)
         if let callSid = currentSession?.callSid {
-            try? await apiClient.endCall(callSid: callSid)
+            print("📞 [CallManager] Calling server to end call: \(callSid)")
+            do {
+                try await apiClient.endCall(callSid: callSid)
+                print("📞 [CallManager] Server confirmed call ended")
+            } catch {
+                print("📞 [CallManager] Server end call failed: \(error), continuing with local disconnect")
+            }
         }
+
+        // End via Twilio SDK (local disconnect)
+        twilioService.endCall()
 
         // Disconnect event stream
         webSocketService.disconnectEventStream()
 
         // End event processing
         eventProcessor.endCall()
+
+        // Update session and state
+        stopDurationTimer()
+
+        if var session = currentSession {
+            session.status = .ended
+            session.endedAt = Date()
+            if let startTime = callStartTime {
+                session.durationSeconds = Int(Date().timeIntervalSince(startTime))
+            }
+            currentSession = session
+
+            // Save call record
+            saveCallRecordAndTranscripts(session: session)
+        }
+
+        // Update app state
+        appState?.endCall()
+
+        // Reset state
+        callState = .idle
+        hasActiveCall = false
+        currentSession = nil
+
+        print("📞 [CallManager] Call ended successfully")
     }
 
     // MARK: - WebSocket Actions
@@ -526,9 +558,18 @@ class CallManager: ObservableObject {
     }
 
     private func handleCallDisconnected(_ call: Call?, error: Error?) {
+        print("📞 [CallManager] Twilio call disconnected callback")
+
+        // Skip if already cleaned up (endCall() was called first)
+        guard hasActiveCall || currentSession != nil else {
+            print("📞 [CallManager] Call already cleaned up, skipping")
+            return
+        }
+
         stopDurationTimer()
 
         if let error = error {
+            print("📞 [CallManager] Call disconnected with error: \(error)")
             callState = .error(error)
             lastError = error
         } else {
