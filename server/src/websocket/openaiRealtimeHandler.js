@@ -1,8 +1,13 @@
 /**
- * OpenAI Realtime API Handler
+ * OpenAI Realtime API Handler - GA Version (August 2025+)
  *
  * This module manages the WebSocket connection to OpenAI's Realtime API for
- * bidirectional speech-to-speech AI conversations.
+ * bidirectional speech-to-speech AI conversations using gpt-realtime model.
+ *
+ * API VERSION: GA (General Availability)
+ * - Beta API deprecated: February 27, 2026
+ * - Model: gpt-realtime, gpt-realtime-mini
+ * - See: https://platform.openai.com/docs/guides/realtime
  *
  * CONNECTION FLOW:
  * ┌─────────────┐         ┌──────────────┐         ┌─────────────────┐
@@ -15,14 +20,24 @@
  *      │ 3. session.update      │ 6. Audio deltas
  *      ▼                        ▼
  *
- * EVENT CATEGORIES:
- * - Session: session.created, session.updated
- * - Input: input_audio_buffer.*, speech_started/stopped
- * - Transcription: conversation.item.input_audio_transcription.completed
- * - Response: response.created, response.done
- * - Audio: response.audio.delta, response.audio.done
- * - Transcript: response.audio_transcript.delta/done
- * - Error: error, rate_limits.updated
+ * CLIENT EVENTS (Server -> OpenAI):
+ * - session.update: Configure session (type, instructions, audio, VAD)
+ * - input_audio_buffer.append: Send user audio
+ * - input_audio_buffer.commit: Signal end of speech (manual VAD)
+ * - input_audio_buffer.clear: Discard pending audio
+ * - response.create: Trigger AI response (manual mode)
+ * - response.cancel: Cancel current response (interruption)
+ * - conversation.item.create: Add text/function results
+ *
+ * SERVER EVENTS (OpenAI -> Server):
+ * - session.created, session.updated
+ * - input_audio_buffer.speech_started/stopped/committed
+ * - conversation.item.created, conversation.item.input_audio_transcription.completed
+ * - response.created, response.output_item.added
+ * - response.audio.delta, response.audio.done (GA also: response.output_audio.*)
+ * - response.audio_transcript.delta/done
+ * - response.done, response.cancelled
+ * - rate_limits.updated, error
  */
 
 import WebSocket from 'ws';
@@ -316,9 +331,9 @@ function sendSessionConfig(session) {
   const sessionConfig = buildSessionConfig(session.config);
 
   // Log detailed config being sent to OpenAI
-  logger.info('Building session config for OpenAI (GA format)', {
+  logger.info('Building session config for OpenAI Realtime API GA', {
     callSid: session.callSid,
-    // iOS app input
+    // iOS app input config
     inputConfig: {
       instructionsLength: session.config.instructions?.length || 0,
       usingDefault: !session.config.instructions || !session.config.instructions.trim(),
@@ -327,10 +342,13 @@ function sendSessionConfig(session) {
       vadType: session.config.vadType,
       vadConfig: session.config.vadConfig,
       voiceSpeed: session.config.voiceSpeed,
+      noiseReduction: session.config.noiseReduction,
+      transcriptionModel: session.config.transcriptionModel,
     },
-    // What we're sending to OpenAI (GA nested format)
+    // What we're sending to OpenAI (GA nested format - August 2025+)
     openAIConfig: {
       type: sessionConfig.type,
+      output_modalities: sessionConfig.output_modalities,
       instructionsLength: sessionConfig.instructions?.length,
       instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
       audioInput: sessionConfig.audio?.input,
@@ -357,18 +375,28 @@ function sendSessionConfig(session) {
 /**
  * Build OpenAI session configuration from our config format
  * Maps our configuration schema to OpenAI's gpt-realtime GA format
- * See: https://platform.openai.com/docs/api-reference/realtime
+ * See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
  * See: https://platform.openai.com/docs/guides/realtime
  *
- * GA format structure:
+ * GA format structure (August 2025+):
  * {
  *   type: "realtime",
  *   instructions: "...",
+ *   output_modalities: ["audio"],
  *   audio: {
- *     input: { turn_detection: { type, eagerness, ... } },
- *     output: { voice: "marin", speed: 1.0 }
+ *     input: {
+ *       turn_detection: { type, eagerness, ... },
+ *       noise_reduction: { type: "near_field" | "far_field" } // optional
+ *     },
+ *     output: {
+ *       voice: "marin" | "cedar",
+ *       speed: 1.0
+ *     }
  *   }
  * }
+ *
+ * NOTE: GA interface removed 'temperature' as a model parameter.
+ * Beta API will be deprecated February 27, 2026.
  */
 function buildSessionConfig(cfg) {
   // GA gpt-realtime session.update
@@ -378,6 +406,9 @@ function buildSessionConfig(cfg) {
 
     // Instructions from iOS app, or default if empty/not provided
     instructions: (cfg.instructions && cfg.instructions.trim()) || getDefaultInstructions(),
+
+    // Output modalities - default to audio for voice conversations
+    output_modalities: ['audio'],
 
     // Audio configuration (nested structure for GA API)
     audio: {
@@ -424,17 +455,32 @@ function buildSessionConfig(cfg) {
     sessionConfig.audio.input.turn_detection = turnDetection;
   }
 
+  // Optional: Noise reduction (near_field for headphones, far_field for speakerphone)
+  if (cfg.noiseReduction) {
+    sessionConfig.audio.input.noise_reduction = { type: cfg.noiseReduction };
+  }
+
+  // Optional: Input transcription configuration
+  if (cfg.transcriptionModel) {
+    sessionConfig.audio.input.transcription = {
+      model: cfg.transcriptionModel,
+    };
+  }
+
   // === AUDIO OUTPUT CONFIG ===
 
-  // Voice (marin, cedar, alloy, echo, shimmer, ash, ballad, coral, sage, verse)
+  // Voice (marin and cedar recommended for GA; also: alloy, echo, shimmer, ash, ballad, coral, sage, verse)
   if (cfg.voice) {
     sessionConfig.audio.output.voice = cfg.voice;
   }
 
-  // Voice speed (1.0 is normal)
+  // Voice speed (0.25 to 4.0, default 1.0)
   if (cfg.voiceSpeed !== undefined && cfg.voiceSpeed !== 1.0) {
     sessionConfig.audio.output.speed = cfg.voiceSpeed;
   }
+
+  // NOTE: maxOutputTokens is not sent in GA session.update
+  // NOTE: temperature is removed in GA interface (was 0.6-1.2 in beta, default 0.8)
 
   return sessionConfig;
 }

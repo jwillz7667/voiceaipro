@@ -22,20 +22,28 @@ class CallSession {
     // Event stream subscribers for this session
     this.eventSubscribers = new Set();
 
+    // Session configuration - aligned with OpenAI Realtime API GA (August 2025+)
+    // See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
+    // NOTE: Beta API will be deprecated February 27, 2026
     this.config = {
+      // Model: gpt-realtime (GA), gpt-realtime-mini, or gpt-realtime-2025-08-28 for EU
       model: 'gpt-realtime',
+      // Voices: marin and cedar are recommended for GA; also available: alloy, echo, shimmer, ash, ballad, coral, sage, verse
       voice: 'marin',
       voiceSpeed: 1.0,
+      // VAD: semantic_vad (understands utterances), server_vad (silence-based), or disabled/none
       vadType: 'semantic_vad',
       vadConfig: {
-        eagerness: 'high',
+        eagerness: 'high', // low, medium, high, auto
         createResponse: true,
         interruptResponse: true,
       },
+      // Noise reduction: null, 'near_field' (headphones), 'far_field' (speakerphone)
       noiseReduction: null,
+      // Transcription model for user speech: gpt-4o-transcribe, gpt-4o-mini-transcribe, or whisper-1
       transcriptionModel: 'gpt-4o-transcribe',
-      temperature: 0.8,
-      maxOutputTokens: 4096,
+      // NOTE: temperature removed in GA interface (was 0.6-1.2 in beta)
+      // NOTE: maxOutputTokens not supported in GA session.update
       instructions: '',
       ...options.config,
     };

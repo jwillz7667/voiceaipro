@@ -2,32 +2,39 @@ import Foundation
 
 // MARK: - RealtimeConfig
 
-/// Configuration for OpenAI Realtime API session
+/// Configuration for OpenAI Realtime API session (GA - August 2025+)
 /// Matches the server-side configuration schema for seamless transmission
+///
+/// API Version: GA (General Availability)
+/// - Beta API deprecated: February 27, 2026
+/// - Models: gpt-realtime, gpt-realtime-mini
+/// - See: https://platform.openai.com/docs/guides/realtime
+///
+/// NOTE: GA API removed `temperature` as a model parameter
+/// NOTE: `maxOutputTokens` not supported in GA session.update
 struct RealtimeConfig: Codable, Equatable {
     var model: RealtimeModel = .gptRealtime
     var voice: RealtimeVoice = .marin
     var voiceSpeed: Double = 1.0
-    var vadConfig: VADConfig = .serverVAD()
+    // Semantic VAD is recommended for GA - context-aware speech detection
+    var vadConfig: VADConfig = .semanticVAD()
+    // Noise reduction: near_field (phone), far_field (speakerphone)
     var noiseReduction: NoiseReduction? = nil
     var transcriptionModel: TranscriptionModel = .gpt4oTranscribe
-    var temperature: Double = 0.8
-    var maxOutputTokens: Int = 4096
     var instructions: String = ""
 
     /// Default configuration for new calls
     static let `default` = RealtimeConfig()
 
-    /// Convert to JSON dictionary for API transmission
+    /// Convert to JSON dictionary for API transmission (GA format)
     /// Note: Empty strings are omitted to avoid overriding server/prompt defaults
+    /// Note: temperature and maxOutputTokens removed for GA API compliance
     func toAPIParams() -> [String: Any] {
         var params: [String: Any] = [
             "model": model.rawValue,
             "voice": voice.rawValue,
             "voiceSpeed": voiceSpeed,
-            "transcriptionModel": transcriptionModel.rawValue,
-            "temperature": temperature,
-            "maxOutputTokens": maxOutputTokens
+            "transcriptionModel": transcriptionModel.rawValue
         ]
 
         // Only include instructions if not empty - empty string would override prompt instructions
@@ -43,14 +50,17 @@ struct RealtimeConfig: Codable, Equatable {
         switch vadConfig {
         case .serverVAD(let serverParams):
             params["vadType"] = "server_vad"
-            params["vadConfig"] = [
+            var vadDict: [String: Any] = [
                 "threshold": serverParams.threshold,
                 "prefixPaddingMs": serverParams.prefixPaddingMs,
                 "silenceDurationMs": serverParams.silenceDurationMs,
-                "idleTimeoutMs": serverParams.idleTimeoutMs as Any,
                 "createResponse": serverParams.createResponse,
                 "interruptResponse": serverParams.interruptResponse
             ]
+            if let idleTimeout = serverParams.idleTimeoutMs {
+                vadDict["idleTimeoutMs"] = idleTimeout
+            }
+            params["vadConfig"] = vadDict
         case .semanticVAD(let semanticParams):
             params["vadType"] = "semantic_vad"
             params["vadConfig"] = [

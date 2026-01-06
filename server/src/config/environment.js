@@ -46,10 +46,15 @@ const config = {
 
   openai: {
     apiKey: requireEnv('OPENAI_API_KEY'),
-    // Base URL - voice and turn_detection will be added dynamically per session
+    // Base URL for Realtime API GA (August 2025+)
+    // See: https://platform.openai.com/docs/guides/realtime
     realtimeBaseUrl: 'wss://api.openai.com/v1/realtime',
+    // GA Models: gpt-realtime, gpt-realtime-mini, gpt-realtime-2025-08-28 (EU)
+    // NOTE: Beta models (gpt-4o-realtime-preview-*) deprecated Feb 27, 2026
     defaultModel: 'gpt-realtime',
+    // Recommended voices for GA: marin, cedar
     defaultVoice: 'marin',
+    // VAD types: semantic_vad (default, utterance-aware), server_vad (silence-based)
     defaultVadType: 'semantic_vad',
   },
 

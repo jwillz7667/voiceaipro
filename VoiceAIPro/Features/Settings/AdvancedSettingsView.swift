@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Advanced AI settings: temperature, tokens, model, noise reduction, transcription
+/// Advanced AI settings: model, noise reduction, transcription
+/// NOTE: temperature and maxOutputTokens removed for OpenAI Realtime API GA compliance
 struct AdvancedSettingsView: View {
     @Binding var config: RealtimeConfig
 
@@ -24,91 +25,6 @@ struct AdvancedSettingsView: View {
                 Text(config.model == .gptRealtime
                     ? "Full-featured model for complex conversations"
                     : "Faster, lighter model for simple tasks")
-            }
-
-            // Temperature
-            Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Temperature")
-                            .font(.system(size: 16, weight: .medium))
-
-                        Spacer()
-
-                        Text(String(format: "%.1f", config.temperature))
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.blue.opacity(0.12))
-                            )
-                    }
-
-                    HStack(spacing: 12) {
-                        Text("Predictable")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-
-                        Slider(value: $config.temperature, in: 0.6...1.2, step: 0.1)
-                            .tint(.blue)
-                            .onChange(of: config.temperature) { _, _ in
-                                let generator = UISelectionFeedbackGenerator()
-                                generator.selectionChanged()
-                            }
-
-                        Text("Creative")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
-            } header: {
-                Text("Response Style")
-            } footer: {
-                Text("Higher values make responses more varied and creative")
-            }
-
-            // Max tokens
-            Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Max Response Length")
-                            .font(.system(size: 16, weight: .medium))
-
-                        Spacer()
-
-                        Text(tokenDisplayValue)
-                            .font(.system(size: 15, weight: .medium, design: .rounded))
-                            .foregroundColor(.blue)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(Color.blue.opacity(0.12))
-                            )
-                    }
-
-                    Slider(
-                        value: Binding(
-                            get: { Double(config.maxOutputTokens) },
-                            set: { config.maxOutputTokens = Int($0) }
-                        ),
-                        in: 256...8192,
-                        step: 256
-                    )
-                    .tint(.blue)
-                    .onChange(of: config.maxOutputTokens) { _, _ in
-                        let generator = UISelectionFeedbackGenerator()
-                        generator.selectionChanged()
-                    }
-                }
-                .padding(.vertical, 4)
-            } header: {
-                Text("Response Length")
-            } footer: {
-                Text("Maximum number of tokens in AI responses")
             }
 
             // Noise reduction
@@ -149,13 +65,6 @@ struct AdvancedSettingsView: View {
         }
         .navigationTitle("Advanced")
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var tokenDisplayValue: String {
-        if config.maxOutputTokens >= 8192 {
-            return "Max"
-        }
-        return "\(config.maxOutputTokens)"
     }
 
     private var currentNoiseReduction: NoiseReductionOption {
