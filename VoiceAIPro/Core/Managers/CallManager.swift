@@ -76,6 +76,9 @@ class CallManager: ObservableObject {
     /// Current call start time
     private var callStartTime: Date?
 
+    /// Flag to prevent re-entrant call initiation (debounce double-taps)
+    private var isCallInitiating: Bool = false
+
     // MARK: - Initialization
 
     init(
@@ -295,10 +298,20 @@ class CallManager: ObservableObject {
         print("🔴 [CallManager] Config instructions length: \(config.instructions.count)")
         print("🔴 [CallManager] Prompt ID: \(promptId?.uuidString ?? "none")")
 
+        // Prevent re-entrant calls (double-tap protection)
+        guard !isCallInitiating else {
+            print("🔴 [CallManager] ERROR: Call already initiating (debounce)!")
+            return
+        }
+
         guard !hasActiveCall else {
             print("🔴 [CallManager] ERROR: Call already active!")
             throw CallManagerError.callAlreadyActive
         }
+
+        // Set flag immediately to prevent re-entry
+        isCallInitiating = true
+        defer { isCallInitiating = false }
 
         callState = .connecting
 
@@ -331,18 +344,21 @@ class CallManager: ObservableObject {
                     "Config": config.toJSON() ?? ""
                 ]
             )
-            print("🔴 [CallManager] Twilio call made, SID: \(call.sid ?? "nil")")
+            // Note: call.sid may be empty string immediately after connect, only populated after SIP signaling
+            let twilioSid: String? = call.sid.isEmpty ? nil : call.sid
+            print("🔴 [CallManager] Twilio call made, SID: \(twilioSid ?? "nil (pending)")")
 
-            // Update session with call SID
+            // Update session with call SID (may be nil initially, updated when call connects)
             var updatedSession = session
-            updatedSession.callSid = call.sid
+            updatedSession.callSid = twilioSid
             currentSession = updatedSession
 
             hasActiveCall = true
             appState?.setActiveCall(session)
 
-            // Start event processor
-            let callId = call.sid ?? session.id.uuidString
+            // Use session UUID as callId since Twilio SID isn't available yet
+            // The server will correlate this via the DeviceId parameter
+            let callId = session.id.uuidString
             print("🔴 [CallManager] Using callId for events: \(callId)")
             eventProcessor.startCall(callId: callId)
 
@@ -355,9 +371,8 @@ class CallManager: ObservableObject {
                 print("🔴 [CallManager] ❌ FAILED to connect event stream: \(error)")
             }
 
-            // Send session config via WebSocket
-            print("🔴 [CallManager] Sending session config via WebSocket...")
-            try? await webSocketService.sendSessionConfig(config)
+            // Note: Config is already passed via TwiML params in makeCall()
+            // sendSessionConfig is only needed for mid-call config updates
             print("🔴 [CallManager] ========== CALL SETUP COMPLETE ==========")
 
         } catch {
@@ -392,16 +407,21 @@ class CallManager: ObservableObject {
 
     // MARK: - WebSocket Actions
 
+    /// Get the current call ID (Twilio SID or session UUID)
+    private var currentCallId: String? {
+        currentSession?.callSid ?? currentSession?.id.uuidString
+    }
+
     /// Update session configuration mid-call
     func updateConfig(_ config: RealtimeConfig) async throws {
-        guard hasActiveCall else { return }
-        try await webSocketService.sendCallAction(.updateConfig(config))
+        guard hasActiveCall, let callId = currentCallId else { return }
+        try await webSocketService.sendCallAction(.updateConfig(config, callId: callId))
     }
 
     /// Cancel current AI response
     func cancelAIResponse() async throws {
-        guard hasActiveCall else { return }
-        try await webSocketService.sendCallAction(.cancelResponse)
+        guard hasActiveCall, let callId = currentCallId else { return }
+        try await webSocketService.sendCallAction(.cancelResponse(callId: callId))
     }
 
     /// Interrupt AI (same as cancel)
@@ -411,8 +431,8 @@ class CallManager: ObservableObject {
 
     /// Clear audio buffer
     func clearAudioBuffer() async throws {
-        guard hasActiveCall else { return }
-        try await webSocketService.sendCallAction(.clearAudioBuffer)
+        guard hasActiveCall, let callId = currentCallId else { return }
+        try await webSocketService.sendCallAction(.clearAudioBuffer(callId: callId))
     }
 
     // MARK: - Inbound Calls
@@ -436,17 +456,20 @@ class CallManager: ObservableObject {
             // Accept the call
             let call = try twilioService.acceptIncomingCall()
 
+            // Handle potentially empty call.sid
+            let twilioSid: String? = call.sid.isEmpty ? nil : call.sid
+
             // Create session
             let session = CallSession.inbound(
                 from: invite.from ?? "Unknown",
-                callSid: call.sid
+                callSid: twilioSid
             )
             currentSession = session
             hasActiveCall = true
             appState?.setActiveCall(session)
 
-            // Start event processor for transcriptions
-            let callId = call.sid ?? session.id.uuidString
+            // Use session UUID as fallback if Twilio SID is empty
+            let callId = twilioSid ?? session.id.uuidString
             eventProcessor.startCall(callId: callId)
 
             // Connect event stream for real-time transcription updates

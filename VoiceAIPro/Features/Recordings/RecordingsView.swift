@@ -31,6 +31,7 @@ struct RecordingsView: View {
                             RecordingRow(
                                 recording: recording,
                                 isPlaying: currentlyPlayingId == recording.id && isPlaying,
+                                isDownloading: currentlyPlayingId == recording.id && isLoading,
                                 onPlay: { togglePlayback(recording) },
                                 onDelete: { confirmDelete(recording) }
                             )
@@ -174,18 +175,54 @@ struct RecordingsView: View {
             isPlaying = false
             currentlyPlayingId = nil
         } else {
-            // Start playback
+            // Start playback - download first if needed
             if let url = recording.localURL {
-                AudioPlayer.shared.play(url: url) { finished in
-                    if finished {
-                        isPlaying = false
-                        currentlyPlayingId = nil
-                    }
-                }
-                isPlaying = true
-                currentlyPlayingId = recording.id
+                playRecording(recording, url: url)
             } else {
-                errorMessage = "Recording file not available locally"
+                // Need to download first
+                downloadAndPlay(recording)
+            }
+        }
+    }
+
+    private func playRecording(_ recording: RecordingMetadata, url: URL) {
+        AudioPlayer.shared.play(url: url) { finished in
+            if finished {
+                isPlaying = false
+                currentlyPlayingId = nil
+            }
+        }
+        isPlaying = true
+        currentlyPlayingId = recording.id
+    }
+
+    private func downloadAndPlay(_ recording: RecordingMetadata) {
+        // Show loading state
+        currentlyPlayingId = recording.id
+        isLoading = true
+
+        Task {
+            do {
+                print("📱 [RecordingsView] Downloading recording: \(recording.id)")
+                let localURL = try await container.apiClient.downloadRecording(id: recording.id)
+                print("📱 [RecordingsView] Downloaded to: \(localURL.path)")
+
+                // Update the recording's local path
+                recording.setLocalPath(localURL.path)
+                try modelContext.save()
+
+                // Now play it
+                await MainActor.run {
+                    isLoading = false
+                    playRecording(recording, url: localURL)
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    currentlyPlayingId = nil
+                    errorMessage = "Failed to download recording: \(error.localizedDescription)"
+                    print("📱 [RecordingsView] ❌ Download failed: \(error)")
+                }
             }
         }
     }
@@ -358,6 +395,7 @@ struct RecordingsView: View {
 struct RecordingRow: View {
     let recording: RecordingMetadata
     let isPlaying: Bool
+    let isDownloading: Bool
     let onPlay: () -> Void
     let onDelete: () -> Void
 
@@ -370,12 +408,18 @@ struct RecordingRow: View {
                         .fill(isPlaying ? Color.blue : Color.blue.opacity(0.15))
                         .frame(width: 44, height: 44)
 
-                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(isPlaying ? .white : .blue)
+                    if isDownloading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    } else {
+                        Image(systemName: isPlaying ? "pause.fill" : (recording.isDownloaded ? "play.fill" : "arrow.down.circle"))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(isPlaying ? .white : .blue)
+                    }
                 }
             }
             .buttonStyle(.plain)
+            .disabled(isDownloading)
 
             // Info
             VStack(alignment: .leading, spacing: 4) {

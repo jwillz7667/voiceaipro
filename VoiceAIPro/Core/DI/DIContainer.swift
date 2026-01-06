@@ -197,6 +197,7 @@ protocol APIClientProtocol {
     func endCall(callSid: String) async throws
     func getCallHistory(limit: Int, offset: Int) async throws -> [[String: Any]]
     func getRecordings(limit: Int, offset: Int) async throws -> [[String: Any]]
+    func downloadRecording(id: UUID) async throws -> URL
     func getPrompts() async throws -> [[String: Any]]
     func savePrompt(_ prompt: Prompt) async throws -> Prompt
     func deletePrompt(id: UUID) async throws
@@ -344,6 +345,39 @@ class APIClient: APIClientProtocol {
         }
 
         return recordings
+    }
+
+    func downloadRecording(id: UUID) async throws -> URL {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.recordings)/\(id.uuidString)/download") else {
+            throw APIError.invalidURL
+        }
+
+        // Download the file
+        let (tempURL, response) = try await URLSession.shared.download(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError
+        }
+
+        // Move to permanent location in Documents directory
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let recordingsDir = documentsPath.appendingPathComponent("Recordings", isDirectory: true)
+
+        // Create recordings directory if needed
+        try FileManager.default.createDirectory(at: recordingsDir, withIntermediateDirectories: true)
+
+        let localURL = recordingsDir.appendingPathComponent("\(id.uuidString).wav")
+
+        // Remove existing file if present
+        if FileManager.default.fileExists(atPath: localURL.path) {
+            try FileManager.default.removeItem(at: localURL)
+        }
+
+        // Move downloaded file to permanent location
+        try FileManager.default.moveItem(at: tempURL, to: localURL)
+
+        return localURL
     }
 
     func getPrompts() async throws -> [[String: Any]] {
@@ -550,6 +584,11 @@ class MockAPIClient: APIClientProtocol {
 
     func getRecordings(limit: Int, offset: Int) async throws -> [[String: Any]] {
         return []
+    }
+
+    func downloadRecording(id: UUID) async throws -> URL {
+        // Return a dummy URL for mock
+        return URL(fileURLWithPath: "/tmp/mock-recording-\(id.uuidString).wav")
     }
 
     func getPrompts() async throws -> [[String: Any]] {

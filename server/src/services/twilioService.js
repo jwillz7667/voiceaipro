@@ -63,6 +63,18 @@ export async function initiateOutgoingCall(options) {
   if (promptId) twimlParams.set('promptId', promptId);
   twimlParams.set('direction', 'outbound');
 
+  // Pass the iOS config as a URL parameter so TwiML can forward it to the media stream
+  // This ensures config is available even if there's a race condition with session creation
+  if (finalConfig) {
+    const configJson = JSON.stringify(finalConfig);
+    twimlParams.set('Config', configJson);
+    logger.info('Passing config to TwiML', {
+      configLength: configJson.length,
+      instructionsLength: finalConfig.instructions?.length || 0,
+      voice: finalConfig.voice,
+    });
+  }
+
   const baseUrl = process.env.SERVER_URL || `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost:3000'}`;
 
   const call = await twilioClient.calls.create({

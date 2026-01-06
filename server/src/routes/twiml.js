@@ -18,12 +18,15 @@ router.post('/outgoing', (req, res) => {
     userId,
     promptId,
     PromptId,  // iOS sends as PromptId
-    Config,    // iOS sends config JSON here
+    Config,    // Config JSON from URL params (passed by twilioService)
     direction = 'outbound',
   } = req.body;
 
   // Use PromptId (from iOS) or promptId
   const effectivePromptId = PromptId || promptId;
+
+  // Config can come from body (URL params forwarded by Twilio) or query string
+  const effectiveConfig = Config || req.query.Config;
 
   logger.info('Outgoing call TwiML requested', {
     to: To,
@@ -31,9 +34,27 @@ router.post('/outgoing', (req, res) => {
     callSid: CallSid,
     userId,
     promptId: effectivePromptId,
-    hasConfig: !!Config,
-    configLength: Config?.length || 0,
+    hasConfig: !!effectiveConfig,
+    configLength: effectiveConfig?.length || 0,
+    configSource: Config ? 'body' : (req.query.Config ? 'query' : 'none'),
   });
+
+  // Parse and log config details for debugging
+  if (effectiveConfig) {
+    try {
+      const parsedConfig = JSON.parse(effectiveConfig);
+      logger.info('TwiML parsed config', {
+        callSid: CallSid,
+        voice: parsedConfig.voice,
+        model: parsedConfig.model,
+        vadType: parsedConfig.vadType,
+        instructionsLength: parsedConfig.instructions?.length || 0,
+        instructionsPreview: parsedConfig.instructions?.substring(0, 50) || '(none)',
+      });
+    } catch (e) {
+      logger.warn('Failed to parse config JSON in TwiML', { error: e.message });
+    }
+  }
 
   const response = new VoiceResponse();
 
@@ -52,9 +73,13 @@ router.post('/outgoing', (req, res) => {
   if (effectivePromptId) {
     stream.parameter({ name: 'promptId', value: effectivePromptId });
   }
-  // Pass the iOS config JSON to the media stream
-  if (Config) {
-    stream.parameter({ name: 'config', value: Config });
+  // Pass the config JSON to the media stream (from twilioService or iOS)
+  if (effectiveConfig) {
+    stream.parameter({ name: 'config', value: effectiveConfig });
+    logger.debug('Passing config to media stream', {
+      callSid: CallSid,
+      configLength: effectiveConfig.length,
+    });
   }
 
   res.type('text/xml');

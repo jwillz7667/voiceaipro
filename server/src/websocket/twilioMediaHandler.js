@@ -280,26 +280,31 @@ export function handleTwilioMediaStream(ws, request) {
       userId: customParameters.userId,
     });
 
-    // Parse iOS config from custom parameters if provided
-    let iosConfig = null;
+    // Parse config from custom parameters (passed through TwiML from twilioService)
+    let streamConfig = null;
     if (customParameters.config) {
       try {
-        iosConfig = JSON.parse(customParameters.config);
-        logger.info('Parsed iOS config from custom parameters', {
+        streamConfig = JSON.parse(customParameters.config);
+        logger.info('📋 [CONFIG] Parsed config from stream parameters', {
           callSid,
-          hasInstructions: !!iosConfig.instructions,
-          instructionsLength: iosConfig.instructions?.length || 0,
-          voice: iosConfig.voice,
-          model: iosConfig.model,
-          vadType: iosConfig.vadConfig?.type || iosConfig.vadType,
+          hasInstructions: !!streamConfig.instructions,
+          instructionsLength: streamConfig.instructions?.length || 0,
+          instructionsPreview: streamConfig.instructions?.substring(0, 80) || '(empty)',
+          voice: streamConfig.voice,
+          model: streamConfig.model,
+          vadType: streamConfig.vadConfig?.type || streamConfig.vadType,
+          voiceSpeed: streamConfig.voiceSpeed,
+          temperature: streamConfig.temperature,
         });
       } catch (e) {
-        logger.error('Failed to parse iOS config JSON', {
+        logger.error('📋 [CONFIG] Failed to parse config JSON from stream', {
           callSid,
           error: e.message,
           configPreview: customParameters.config?.substring(0, 100),
         });
       }
+    } else {
+      logger.warn('📋 [CONFIG] No config in stream parameters', { callSid });
     }
 
     // Create or retrieve session
@@ -309,7 +314,7 @@ export function handleTwilioMediaStream(ws, request) {
       let promptConfig = null;
       if (customParameters.promptId) {
         promptConfig = await loadPromptConfig(customParameters.promptId);
-        logger.info('Loaded prompt config for new session', {
+        logger.info('📋 [CONFIG] Loaded prompt config for new session', {
           callSid,
           promptId: customParameters.promptId,
           hasInstructions: !!promptConfig?.instructions,
@@ -318,19 +323,21 @@ export function handleTwilioMediaStream(ws, request) {
         });
       }
 
-      // Merge configs: iOS config takes priority over prompt config
+      // Merge configs: stream config (from iOS via TwiML) takes priority over prompt config
       // This allows the iOS app to override prompt defaults
       const mergedConfig = {
         ...promptConfig,
-        ...iosConfig,
+        ...streamConfig,
       };
 
-      logger.info('Creating session with merged config', {
+      logger.info('📋 [CONFIG] Creating session with merged config', {
         callSid,
         hasPromptConfig: !!promptConfig,
-        hasIosConfig: !!iosConfig,
-        mergedInstructions: mergedConfig.instructions?.length || 0,
-        mergedVoice: mergedConfig.voice,
+        hasStreamConfig: !!streamConfig,
+        finalInstructions: mergedConfig.instructions?.length || 0,
+        finalInstructionsPreview: mergedConfig.instructions?.substring(0, 80) || '(default)',
+        finalVoice: mergedConfig.voice,
+        finalVadType: mergedConfig.vadType,
       });
 
       session = connectionManager.createSession(callSid, {
@@ -342,20 +349,28 @@ export function handleTwilioMediaStream(ws, request) {
         config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined,
       });
     } else {
-      // Session already exists (created by initiateOutgoingCall)
-      // Apply iOS config if provided
-      if (iosConfig) {
-        logger.info('Applying iOS config to existing session', {
+      // Session already exists (created by initiateOutgoingCall via twilioService)
+      logger.info('📋 [CONFIG] Found existing session', {
+        callSid,
+        existingInstructions: session.config.instructions?.length || 0,
+        existingVoice: session.config.voice,
+        hasStreamConfig: !!streamConfig,
+      });
+
+      // Apply stream config if provided (as override/supplement)
+      if (streamConfig) {
+        logger.info('📋 [CONFIG] Applying stream config to existing session', {
           callSid,
-          instructionsLength: iosConfig.instructions?.length || 0,
+          streamInstructions: streamConfig.instructions?.length || 0,
+          streamVoice: streamConfig.voice,
         });
-        session.updateConfig(iosConfig);
+        session.updateConfig(streamConfig);
       }
-      // If it doesn't have instructions but has a promptId, load them now
+      // If no stream config but session has promptId without instructions, load from DB
       else if (session.promptId && !session.config.instructions) {
         const promptConfig = await loadPromptConfig(session.promptId);
         if (promptConfig) {
-          logger.info('Loading missing prompt config for existing session', {
+          logger.info('📋 [CONFIG] Loading missing prompt config for existing session', {
             callSid,
             promptId: session.promptId,
             instructionsLength: promptConfig.instructions?.length || 0,
@@ -363,6 +378,16 @@ export function handleTwilioMediaStream(ws, request) {
           session.updateConfig(promptConfig);
         }
       }
+
+      // Log final config being used
+      logger.info('📋 [CONFIG] Final session config', {
+        callSid,
+        instructions: session.config.instructions?.length || 0,
+        instructionsPreview: session.config.instructions?.substring(0, 80) || '(default)',
+        voice: session.config.voice,
+        vadType: session.config.vadType,
+        model: session.config.model,
+      });
     }
 
     // Initialize audio buffer for this session

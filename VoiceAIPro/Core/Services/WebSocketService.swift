@@ -153,11 +153,17 @@ class WebSocketService: ObservableObject {
         }
     }
 
-    /// Send session configuration
-    func sendSessionConfig(_ config: RealtimeConfig) async throws {
+    /// Send session configuration update for an active call
+    /// - Parameters:
+    ///   - config: The updated realtime configuration
+    ///   - callId: The call SID or session ID to update
+    func sendSessionConfig(_ config: RealtimeConfig, callId: String) async throws {
         let message: [String: Any] = [
             "type": "session.config",
-            "config": config.toAPIParams()
+            "payload": [
+                "call_sid": callId,
+                "config": config.toAPIParams()
+            ]
         ]
         try await controlClient?.sendJSON(message)
     }
@@ -407,27 +413,42 @@ class WebSocketService: ObservableObject {
 
 /// Actions that can be sent to the server during a call
 enum CallAction: Codable {
-    case updateConfig(RealtimeConfig)
-    case cancelResponse
-    case commitAudio
-    case clearAudioBuffer
-    case interruptAI
+    case updateConfig(RealtimeConfig, callId: String)
+    case cancelResponse(callId: String)
+    case commitAudio(callId: String)
+    case clearAudioBuffer(callId: String)
+    case interruptAI(callId: String)
 
     func toMessage() throws -> [String: Any] {
         switch self {
-        case .updateConfig(let config):
+        case .updateConfig(let config, let callId):
             return [
                 "type": "call.config.update",
-                "config": config.toAPIParams()
+                "payload": [
+                    "call_sid": callId,
+                    "config": config.toAPIParams()
+                ]
             ]
-        case .cancelResponse:
-            return ["type": "response.cancel"]
-        case .commitAudio:
-            return ["type": "input_audio_buffer.commit"]
-        case .clearAudioBuffer:
-            return ["type": "input_audio_buffer.clear"]
-        case .interruptAI:
-            return ["type": "response.cancel"]
+        case .cancelResponse(let callId):
+            return [
+                "type": "response.cancel",
+                "payload": ["call_sid": callId]
+            ]
+        case .commitAudio(let callId):
+            return [
+                "type": "input_audio_buffer.commit",
+                "payload": ["call_sid": callId]
+            ]
+        case .clearAudioBuffer(let callId):
+            return [
+                "type": "input_audio_buffer.clear",
+                "payload": ["call_sid": callId]
+            ]
+        case .interruptAI(let callId):
+            return [
+                "type": "response.cancel",
+                "payload": ["call_sid": callId]
+            ]
         }
     }
 }

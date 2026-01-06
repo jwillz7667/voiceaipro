@@ -7,10 +7,12 @@ struct CallDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject var container: DIContainer
 
     @State private var showingAddFavorite = false
     @State private var transcripts: [TranscriptEntry] = []
     @State private var showFullTranscript = false
+    @State private var isLoadingTranscripts = false
 
     var body: some View {
         NavigationStack {
@@ -92,18 +94,29 @@ struct CallDetailView: View {
                 }
 
                 // Transcript section
-                if !transcripts.isEmpty {
-                    Section {
-                        ForEach(transcripts) { transcript in
+                Section {
+                    if isLoadingTranscripts {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .padding()
+                            Spacer()
+                        }
+                    } else if transcripts.isEmpty {
+                        Text("No transcripts available")
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        ForEach(transcripts.prefix(3)) { transcript in
                             TranscriptRow(transcript: transcript)
                         }
 
-                        if transcripts.count > 2 {
+                        if transcripts.count > 3 {
                             Button {
                                 showFullTranscript = true
                             } label: {
                                 HStack {
-                                    Text("View Full Transcript")
+                                    Text("View All \(transcripts.count) Entries")
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.system(size: 12, weight: .semibold))
@@ -111,10 +124,12 @@ struct CallDetailView: View {
                                 }
                             }
                         }
-                    } header: {
-                        HStack {
-                            Text("Transcript")
-                            Spacer()
+                    }
+                } header: {
+                    HStack {
+                        Text("Transcript")
+                        Spacer()
+                        if !transcripts.isEmpty {
                             Text("\(transcripts.count) entries")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
@@ -175,8 +190,64 @@ struct CallDetailView: View {
 
     private func loadTranscripts() {
         guard let callSid = call.callSid else { return }
+
+        // First check local storage
         let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
-        transcripts = (try? modelContext.fetch(descriptor)) ?? []
+        let localTranscripts = (try? modelContext.fetch(descriptor)) ?? []
+
+        if !localTranscripts.isEmpty {
+            transcripts = localTranscripts
+            return
+        }
+
+        // If no local transcripts, fetch from server
+        fetchTranscriptsFromServer(callSid: callSid)
+    }
+
+    private func fetchTranscriptsFromServer(callSid: String) {
+        isLoadingTranscripts = true
+
+        Task {
+            do {
+                print("📱 [CallDetailView] Fetching transcripts for: \(callSid)")
+                let response = try await container.apiClient.getFullCallDetails(callSid: callSid)
+
+                guard let serverTranscripts = response.transcripts, !serverTranscripts.isEmpty else {
+                    print("📱 [CallDetailView] No transcripts from server")
+                    await MainActor.run { isLoadingTranscripts = false }
+                    return
+                }
+
+                print("📱 [CallDetailView] Got \(serverTranscripts.count) transcripts from server")
+
+                // Convert and save to SwiftData
+                await MainActor.run {
+                    for serverTranscript in serverTranscripts {
+                        // Check if already exists
+                        let existingDescriptor = FetchDescriptor<TranscriptEntry>(
+                            predicate: #Predicate { $0.id == serverTranscript.id }
+                        )
+                        let existsCount = (try? modelContext.fetchCount(existingDescriptor)) ?? 0
+
+                        if existsCount == 0 {
+                            let entry = serverTranscript.toTranscriptEntry(callSid: callSid)
+                            modelContext.insert(entry)
+                        }
+                    }
+
+                    try? modelContext.save()
+
+                    // Reload local transcripts
+                    let descriptor = TranscriptEntry.transcripts(forCallSid: callSid)
+                    transcripts = (try? modelContext.fetch(descriptor)) ?? []
+                    isLoadingTranscripts = false
+                    print("📱 [CallDetailView] Saved \(transcripts.count) transcripts locally")
+                }
+            } catch {
+                print("📱 [CallDetailView] Failed to fetch transcripts: \(error)")
+                await MainActor.run { isLoadingTranscripts = false }
+            }
+        }
     }
 
     // MARK: - Computed Properties
@@ -433,7 +504,7 @@ struct FullTranscriptView: View {
 
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CallRecord.self, TranscriptEntry.self, configurations: config)
+    let modelContainer = try! ModelContainer(for: CallRecord.self, TranscriptEntry.self, configurations: config)
 
     let call = CallRecord(
         direction: "outbound",
@@ -444,5 +515,6 @@ struct FullTranscriptView: View {
     call.callSid = "CA1234567890abcdef1234567890abcdef"
 
     return CallDetailView(call: call)
-        .modelContainer(container)
+        .modelContainer(modelContainer)
+        .environmentObject(DIContainer.shared)
 }
