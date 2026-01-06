@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
+import { query } from '../db/pool.js';
+import { logTranscript } from '../services/eventLogger.js';
 
 const logger = createLogger('connections');
 
@@ -412,14 +414,23 @@ class ConnectionManager {
       return false;
     }
 
+    const durationMs = Date.now() - session.createdAt.getTime();
+    const durationSeconds = Math.floor(durationMs / 1000);
+
     logger.info('Destroying session', {
       callSid,
       sessionId: session.id,
       reason,
-      duration: Date.now() - session.createdAt.getTime(),
+      duration: durationMs,
+      transcriptCount: session.transcripts?.length || 0,
     });
 
     session.updateStatus('ended');
+
+    // Save session data to database asynchronously
+    this._saveSessionToDatabase(session, durationSeconds, reason).catch(error => {
+      logger.error('Failed to save session to database', { callSid, error: error.message });
+    });
 
     if (session.twilioWs) {
       try {
@@ -461,6 +472,56 @@ class ConnectionManager {
 
     this.sessions.delete(callSid);
     return true;
+  }
+
+  /**
+   * Save session data (including transcripts) to database
+   */
+  async _saveSessionToDatabase(session, durationSeconds, reason) {
+    try {
+      // Update call session status in database
+      await query(
+        `UPDATE call_sessions
+         SET status = 'completed', ended_at = NOW(), duration_seconds = $1
+         WHERE call_sid = $2`,
+        [durationSeconds, session.callSid]
+      );
+
+      logger.info('Updated call session in database', {
+        callSid: session.callSid,
+        durationSeconds,
+      });
+
+      // Save transcripts to database
+      if (session.transcripts && session.transcripts.length > 0) {
+        logger.info('Saving transcripts to database', {
+          callSid: session.callSid,
+          count: session.transcripts.length,
+        });
+
+        for (const transcript of session.transcripts) {
+          await logTranscript(
+            session.id,
+            transcript.speaker,
+            transcript.content,
+            transcript.timestampMs,
+            { callSid: session.callSid }
+          );
+        }
+
+        logger.info('Transcripts saved successfully', {
+          callSid: session.callSid,
+          count: session.transcripts.length,
+        });
+      }
+    } catch (error) {
+      logger.error('Error saving session to database', {
+        callSid: session.callSid,
+        error: error.message,
+        stack: error.stack,
+      });
+      throw error;
+    }
   }
 
   handleConnectionDrop(callSid, connectionType, error = null) {
