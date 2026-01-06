@@ -278,6 +278,7 @@ export function handleTwilioMediaStream(ws, request) {
       channels: mediaFormat.channels,     // Expected: 1
       promptId: customParameters.promptId,
       userId: customParameters.userId,
+      sessionId: customParameters.sessionId, // iOS session UUID
     });
 
     // Retrieve config from pending store using configId
@@ -347,6 +348,7 @@ export function handleTwilioMediaStream(ws, request) {
         phoneNumber: customParameters.to || customParameters.from || null,
         userId: customParameters.userId || null,
         promptId: customParameters.promptId || null,
+        iosSessionId: customParameters.sessionId || null, // iOS session UUID for event stream correlation
         protocolVersion,
         config: Object.keys(mergedConfig).length > 0 ? mergedConfig : undefined,
       });

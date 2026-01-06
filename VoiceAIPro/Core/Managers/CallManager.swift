@@ -340,6 +340,7 @@ class CallManager: ObservableObject {
             let call = try await twilioService.makeCall(
                 to: phoneNumber,
                 params: [
+                    "SessionId": session.id.uuidString,
                     "PromptId": promptId?.uuidString ?? "",
                     "Config": config.toJSON() ?? ""
                 ]

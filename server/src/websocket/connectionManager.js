@@ -286,6 +286,9 @@ class ConnectionManager {
     // Pending configs for outbound calls (stored before callSid is known)
     // Key: configId (short UUID), Value: { config, createdAt }
     this.pendingConfigs = new Map();
+    // Map iOS session UUIDs to Twilio callSid for correlation
+    // Key: iOS session UUID, Value: callSid (Twilio)
+    this.iosSessionMap = new Map();
   }
 
   /**
@@ -340,11 +343,22 @@ class ConnectionManager {
       } else {
         logger.warn('Session already exists, returning existing', { callSid });
       }
+      // Store iOS session ID mapping if provided
+      if (options.iosSessionId) {
+        this.iosSessionMap.set(options.iosSessionId, callSid);
+        logger.info('iOS session ID mapped', { iosSessionId: options.iosSessionId, callSid });
+      }
       return existingSession;
     }
 
     const session = new CallSession(callSid, options);
     this.sessions.set(callSid, session);
+
+    // Store iOS session ID mapping if provided (for event stream correlation)
+    if (options.iosSessionId) {
+      this.iosSessionMap.set(options.iosSessionId, callSid);
+      logger.info('iOS session ID mapped', { iosSessionId: options.iosSessionId, callSid });
+    }
 
     // Transfer any pending event subscribers that connected before session was created
     const pendingSubscribers = this.eventSubscribers.get(callSid);
@@ -362,9 +376,28 @@ class ConnectionManager {
       this.eventSubscribers.delete(callSid);
     }
 
+    // Also check if there are pending subscribers registered with iOS session ID
+    if (options.iosSessionId) {
+      const iosSubscribers = this.eventSubscribers.get(options.iosSessionId);
+      if (iosSubscribers && iosSubscribers.size > 0) {
+        logger.info('Transferring iOS session subscribers to session', {
+          callSid,
+          iosSessionId: options.iosSessionId,
+          count: iosSubscribers.size,
+        });
+        iosSubscribers.forEach((ws) => {
+          if (ws.readyState === 1) {
+            session.addEventSubscriber(ws);
+          }
+        });
+        this.eventSubscribers.delete(options.iosSessionId);
+      }
+    }
+
     logger.info('Session created', {
       callSid,
       sessionId: session.id,
+      iosSessionId: options.iosSessionId || null,
       direction: session.direction,
       phoneNumber: session.phoneNumber,
       config: {
@@ -389,6 +422,17 @@ class ConnectionManager {
   }
 
   getSessionById(sessionId) {
+    // First check if this is an iOS session ID that maps to a callSid
+    const mappedCallSid = this.iosSessionMap.get(sessionId);
+    if (mappedCallSid) {
+      const session = this.sessions.get(mappedCallSid);
+      if (session) {
+        logger.debug('Found session via iOS session map', { sessionId, callSid: mappedCallSid });
+        return session;
+      }
+    }
+
+    // Otherwise search by server-generated session ID
     for (const session of this.sessions.values()) {
       if (session.id === sessionId) {
         return session;
@@ -468,6 +512,15 @@ class ConnectionManager {
         }
       });
       this.eventSubscribers.delete(callSid);
+    }
+
+    // Clean up iOS session ID mapping
+    for (const [iosSessionId, mappedCallSid] of this.iosSessionMap.entries()) {
+      if (mappedCallSid === callSid) {
+        this.iosSessionMap.delete(iosSessionId);
+        logger.debug('Removed iOS session ID mapping', { iosSessionId, callSid });
+        break;
+      }
     }
 
     this.sessions.delete(callSid);

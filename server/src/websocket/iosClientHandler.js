@@ -411,21 +411,37 @@ function sendError(ws, code, message) {
   sendMessage(ws, 'error', { code, message });
 }
 
-export function handleEventStreamConnection(ws, request, callSid) {
-  logger.info('🟢 [EVENT-STREAM] ========== NEW CONNECTION ==========', { callSid });
+export function handleEventStreamConnection(ws, request, callId) {
+  logger.info('🟢 [EVENT-STREAM] ========== NEW CONNECTION ==========', { callId });
 
-  const session = connectionManager.getSession(callSid);
+  // Try to find session by callSid first (Twilio SID), then by session UUID
+  // iOS app sends session UUID because Twilio SID isn't available immediately
+  let session = connectionManager.getSession(callId);
+  if (!session) {
+    // Try looking up by session UUID
+    session = connectionManager.getSessionById(callId);
+    logger.info('🟢 [EVENT-STREAM] Session lookup by UUID', {
+      callId,
+      sessionFound: !!session,
+      sessionId: session?.id,
+      sessionCallSid: session?.callSid,
+    });
+  }
+
   logger.info('🟢 [EVENT-STREAM] Session lookup result', {
-    callSid,
+    callId,
     sessionFound: !!session,
     sessionId: session?.id,
   });
+
+  // Use the actual session callSid for subscriptions if we found a session
+  const effectiveCallSid = session?.callSid || callId;
 
   if (session) {
     logger.info('🟢 [EVENT-STREAM] Session exists, adding subscriber');
 
     sendMessage(ws, 'connected', {
-      call_sid: callSid,
+      call_sid: session.callSid,
       session: session.toJSON(),
     });
     logger.info('🟢 [EVENT-STREAM] Sent connected message');
@@ -444,26 +460,26 @@ export function handleEventStreamConnection(ws, request, callSid) {
     });
 
     ws.on('close', () => {
-      logger.info('🟢 [EVENT-STREAM] Connection closed', { callSid });
+      logger.info('🟢 [EVENT-STREAM] Connection closed', { callId, callSid: session.callSid });
       session.removeEventSubscriber(ws);
-      connectionManager.unsubscribeFromEvents(callSid, ws);
+      connectionManager.unsubscribeFromEvents(effectiveCallSid, ws);
     });
   } else {
     logger.info('🟢 [EVENT-STREAM] ⚠️ No session yet, registering for future events');
     // No active session, still register for future events
-    connectionManager.subscribeToEvents(callSid, ws);
+    connectionManager.subscribeToEvents(callId, ws);
     logger.info('🟢 [EVENT-STREAM] Registered with connectionManager', {
-      pendingCount: connectionManager.eventSubscribers.get(callSid)?.size || 0,
+      pendingCount: connectionManager.eventSubscribers.get(callId)?.size || 0,
     });
 
     ws.on('close', () => {
-      logger.info('🟢 [EVENT-STREAM] Connection closed (no session)', { callSid });
-      connectionManager.unsubscribeFromEvents(callSid, ws);
+      logger.info('🟢 [EVENT-STREAM] Connection closed (no session)', { callId });
+      connectionManager.unsubscribeFromEvents(callId, ws);
     });
   }
 
   ws.on('error', (error) => {
-    logger.error('🟢 [EVENT-STREAM] ❌ Error', { callSid, error: error.message });
+    logger.error('🟢 [EVENT-STREAM] ❌ Error', { callId, error: error.message });
   });
 }
 
