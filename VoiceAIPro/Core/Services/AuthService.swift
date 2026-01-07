@@ -143,7 +143,9 @@ final class AuthService: ObservableObject {
         }
 
         if httpResponse.statusCode == 200 {
-            let result = try JSONDecoder().decode(LoginResponse.self, from: data)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let result = try decoder.decode(LoginResponse.self, from: data)
 
             // Store tokens in keychain
             try keychain.storeAuthTokens(
