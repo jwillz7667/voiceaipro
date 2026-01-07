@@ -5,9 +5,14 @@ import { createLogger } from '../utils/logger.js';
 import connectionManager from '../websocket/connectionManager.js';
 import * as callService from '../services/twilioService.js';
 import { query } from '../db/pool.js';
+import { optionalAuth, legacyDeviceSupport } from '../middleware/auth.js';
 
 const router = Router();
 const logger = createLogger('routes:calls');
+
+// Apply auth middleware to all routes
+router.use(optionalAuth());
+router.use(legacyDeviceSupport());
 
 router.post('/outgoing', async (req, res) => {
   try {
@@ -127,10 +132,23 @@ router.get('/history', async (req, res) => {
     const {
       limit = 50,
       offset = 0,
-      user_id,
       direction,
       status,
     } = req.query;
+
+    // Get user identifier - authenticated user takes priority
+    const userId = req.user?.id || null;
+    const deviceId = req.legacyDeviceId || req.query.device_id || null;
+
+    // SECURITY: Must have either authenticated user or device_id
+    if (!userId && !deviceId) {
+      return res.status(401).json({
+        error: {
+          code: 'AUTH_REQUIRED',
+          message: 'Authentication or device_id required to view call history',
+        },
+      });
+    }
 
     let queryText = `
       SELECT id, call_sid, direction, phone_number, status,
@@ -141,9 +159,14 @@ router.get('/history', async (req, res) => {
     const params = [];
     let paramIndex = 1;
 
-    if (user_id) {
+    // Filter by authenticated user OR device_id
+    if (userId) {
       queryText += ` AND user_id = $${paramIndex++}`;
-      params.push(user_id);
+      params.push(userId);
+    } else if (deviceId) {
+      // Legacy: filter by device_id stored in user_id field
+      queryText += ` AND user_id = $${paramIndex++}`;
+      params.push(deviceId);
     }
 
     if (direction) {
@@ -161,9 +184,17 @@ router.get('/history', async (req, res) => {
 
     const result = await query(queryText, params);
 
-    const countResult = await query(
-      'SELECT COUNT(*) as total FROM call_sessions WHERE 1=1'
-    );
+    // Count only user's calls
+    let countQuery = 'SELECT COUNT(*) as total FROM call_sessions WHERE ';
+    const countParams = [];
+    if (userId) {
+      countQuery += 'user_id = $1';
+      countParams.push(userId);
+    } else {
+      countQuery += 'user_id = $1';
+      countParams.push(deviceId);
+    }
+    const countResult = await query(countQuery, countParams);
 
     res.json({
       calls: result.rows.map((row) => ({

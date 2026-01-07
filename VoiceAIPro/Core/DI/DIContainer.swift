@@ -366,11 +366,13 @@ class APIClient: APIClientProtocol {
     }
 
     func getCallHistory(limit: Int, offset: Int) async throws -> [[String: Any]] {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.callsHistory)?limit=\(limit)&offset=\(offset)") else {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.callsHistory)?limit=\(limit)&offset=\(offset)&device_id=\(deviceId)") else {
             throw APIError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = await createRequest(url: url, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -386,11 +388,13 @@ class APIClient: APIClientProtocol {
     }
 
     func getRecordings(limit: Int, offset: Int) async throws -> [[String: Any]] {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.recordings)?limit=\(limit)&offset=\(offset)") else {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.recordings)?limit=\(limit)&offset=\(offset)&device_id=\(deviceId)") else {
             throw APIError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = await createRequest(url: url, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -410,8 +414,10 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
+        let request = await createRequest(url: url, method: "GET")
+
         // Download the file
-        let (tempURL, response) = try await URLSession.shared.download(from: url)
+        let (tempURL, response) = try await URLSession.shared.download(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -439,11 +445,13 @@ class APIClient: APIClientProtocol {
     }
 
     func getPrompts() async throws -> [[String: Any]] {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?user_id=\(deviceId)") else {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?device_id=\(deviceId)") else {
             throw APIError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = await createRequest(url: url, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -600,7 +608,9 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        let request = await createRequest(url: url, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
