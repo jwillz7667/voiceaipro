@@ -226,10 +226,37 @@ class APIClient: APIClientProtocol {
     private let deviceId: String
     private var accessToken: String?
     private var tokenExpiry: Date?
+    private let keychain = KeychainManager.shared
 
     init(baseURL: String, deviceId: String) {
         self.baseURL = baseURL
         self.deviceId = deviceId
+    }
+
+    // MARK: - Auth Header Helper
+
+    /// Add authentication header to request if user is authenticated
+    private func addAuthHeader(to request: inout URLRequest) async {
+        // Try to get valid auth token
+        if keychain.isAuthenticated {
+            do {
+                let token = try await AuthService.shared.getValidAccessToken()
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            } catch {
+                // Fall back to no auth if token refresh fails
+                print("Failed to get auth token: \(error)")
+            }
+        }
+    }
+
+    /// Create a request with optional auth
+    private func createRequest(url: URL, method: String = "GET") async -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(deviceId, forHTTPHeaderField: "X-Device-ID")
+        await addAuthHeader(to: &request)
+        return request
     }
 
     func fetchAccessToken() async throws -> String {
@@ -404,11 +431,13 @@ class APIClient: APIClientProtocol {
     }
 
     func getPromptsTyped() async throws -> [PromptDTO] {
-        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?user_id=\(deviceId)") else {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.prompts)?device_id=\(deviceId)") else {
             throw APIError.invalidURL
         }
 
-        let (data, response) = try await URLSession.shared.data(from: url)
+        var request = await createRequest(url: url, method: "GET")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
@@ -428,15 +457,13 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var request = await createRequest(url: url, method: "POST")
 
         var body: [String: Any] = [
             "name": name,
             "instructions": instructions,
             "voice": voice,
-            "user_id": deviceId
+            "device_id": deviceId
         ]
 
         if let vadConfig = vadConfig {
@@ -465,9 +492,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "PUT"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        var request = await createRequest(url: url, method: "PUT")
 
         var body: [String: Any] = [:]
         if let name = name { body["name"] = name }

@@ -3,10 +3,64 @@ import SwiftUI
 /// Main settings view with navigation to all configuration options
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @StateObject private var authService = AuthService.shared
+    @State private var showLogoutConfirmation = false
 
     var body: some View {
         NavigationStack {
             List {
+                // Account Section
+                if authService.isAuthenticated {
+                    Section {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.blue.opacity(0.1))
+                                    .frame(width: 44, height: 44)
+
+                                Text(authService.currentUser?.email.prefix(1).uppercased() ?? "?")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.blue)
+                            }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(authService.currentUser?.name ?? "User")
+                                    .font(.system(size: 16, weight: .medium))
+
+                                Text(authService.currentUser?.email ?? "")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            if authService.currentUser?.emailVerified == true {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundColor(.green)
+                                    .font(.system(size: 16))
+                            }
+                        }
+                        .padding(.vertical, 4)
+
+                        Button(role: .destructive) {
+                            showLogoutConfirmation = true
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .font(.system(size: 18, weight: .medium))
+                                    .foregroundColor(.red)
+                                    .frame(width: 28)
+
+                                Text("Sign Out")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    } header: {
+                        Text("Account")
+                    }
+                }
+
                 // AI Configuration
                 Section {
                     // Voice
@@ -137,6 +191,18 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
+            .confirmationDialog(
+                "Sign Out",
+                isPresented: $showLogoutConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Sign Out", role: .destructive) {
+                    authService.logout()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Are you sure you want to sign out? You'll need to sign in again to sync your data.")
+            }
         }
     }
 

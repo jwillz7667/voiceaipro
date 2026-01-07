@@ -2,9 +2,13 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
 import { query, transaction } from '../db/pool.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
 const logger = createLogger('routes:prompts');
+
+// Apply optional auth to all routes - allows both authenticated and legacy device_id access
+router.use(optionalAuth());
 
 /**
  * Ensure a user exists in the database, creating them if needed
@@ -40,17 +44,26 @@ async function ensureUserExists(deviceId) {
 
 router.get('/', async (req, res) => {
   try {
-    const { user_id, include_default = 'true' } = req.query;
+    const { user_id, device_id, include_default = 'true' } = req.query;
 
-    // Look up actual user UUID from device_id if provided
+    // Priority: 1) Authenticated user, 2) device_id query param, 3) user_id query param (legacy)
     let actualUserId = null;
-    if (user_id) {
-      const userResult = await query(
-        'SELECT id FROM users WHERE device_id = $1 OR id::text = $1',
-        [user_id]
-      );
-      if (userResult.rows.length > 0) {
-        actualUserId = userResult.rows[0].id;
+
+    if (req.user) {
+      // Authenticated user - use their ID directly
+      actualUserId = req.user.id;
+      logger.debug('Using authenticated user ID', { userId: actualUserId });
+    } else {
+      // Legacy device_id lookup
+      const deviceIdToLookup = device_id || user_id;
+      if (deviceIdToLookup) {
+        const userResult = await query(
+          'SELECT id FROM users WHERE device_id = $1 OR id::text = $1',
+          [deviceIdToLookup]
+        );
+        if (userResult.rows.length > 0) {
+          actualUserId = userResult.rows[0].id;
+        }
       }
     }
 
@@ -70,8 +83,11 @@ router.get('/', async (req, res) => {
         queryText += ` AND user_id = $${paramIndex++}`;
       }
       params.push(actualUserId);
-    } else if (user_id) {
-      // No user found, just return defaults
+    } else if (!req.user && (user_id || device_id)) {
+      // Legacy mode: No user found, just return defaults
+      queryText += ' AND is_default = true';
+    } else if (!req.user && !user_id && !device_id) {
+      // No auth and no device_id - return only defaults
       queryText += ' AND is_default = true';
     }
 
@@ -155,6 +171,7 @@ router.post('/', async (req, res) => {
   try {
     const {
       user_id,
+      device_id,
       name,
       instructions,
       voice = 'marin',
@@ -171,8 +188,14 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Ensure user exists if user_id is provided
-    const validUserId = user_id ? await ensureUserExists(user_id) : null;
+    // Priority: 1) Authenticated user, 2) device_id/user_id from body
+    let validUserId = null;
+    if (req.user) {
+      validUserId = req.user.id;
+    } else {
+      const deviceIdToUse = device_id || user_id;
+      validUserId = deviceIdToUse ? await ensureUserExists(deviceIdToUse) : null;
+    }
 
     const id = uuidv4();
 

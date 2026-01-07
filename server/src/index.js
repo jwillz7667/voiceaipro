@@ -18,6 +18,7 @@ import twimlRouter from './routes/twiml.js';
 import callsRouter from './routes/calls.js';
 import recordingsRouter from './routes/recordings.js';
 import promptsRouter from './routes/prompts.js';
+import authRouter from './routes/auth.js';
 
 const appLogger = createLogger('app');
 
@@ -71,6 +72,25 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
+// Stricter rate limiting for auth endpoints (5 requests per minute)
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  message: {
+    error: {
+      code: 'AUTH_RATE_LIMITED',
+      message: 'Too many authentication attempts, please try again later',
+    },
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+});
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
+
 // Simple health check for Railway (no async operations)
 app.get('/health', (req, res) => {
   appLogger.debug('Health check received');
@@ -122,6 +142,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       api: {
+        auth: '/api/auth',
         token: '/api/token',
         calls: '/api/calls',
         recordings: '/api/recordings',
@@ -142,6 +163,7 @@ app.get('/', (req, res) => {
   });
 });
 
+app.use('/api/auth', authRouter);
 app.use('/api/token', tokenRouter);
 app.use('/twiml', twimlRouter);
 app.use('/api/calls', callsRouter);

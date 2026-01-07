@@ -39,7 +39,7 @@ struct VoiceAIProApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RootView()
                 .environmentObject(appState)
                 .environmentObject(container)
                 .modelContainer(sharedModelContainer)
