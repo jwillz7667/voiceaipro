@@ -171,8 +171,14 @@ final class AuthService: ObservableObject {
 
     /// Logout current user
     func logout() {
+        // Get refresh token before clearing keychain (for server notification)
+        let refreshToken = keychain.getRefreshToken()
+
         // Clear tokens from keychain
         keychain.clearAll()
+
+        // Clear all local SwiftData for privacy
+        DIContainer.shared.clearAllLocalData()
 
         // Reset state
         isAuthenticated = false
@@ -180,14 +186,14 @@ final class AuthService: ObservableObject {
         error = nil
 
         // Notify server (fire and forget)
-        Task {
-            try? await notifyServerLogout()
+        if let token = refreshToken {
+            Task {
+                try? await notifyServerLogout(refreshToken: token)
+            }
         }
     }
 
-    private func notifyServerLogout() async throws {
-        guard let refreshToken = keychain.getRefreshToken() else { return }
-
+    private func notifyServerLogout(refreshToken: String) async throws {
         let url = URL(string: "\(baseURL)/api/auth/logout")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

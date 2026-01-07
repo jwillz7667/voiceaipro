@@ -170,6 +170,34 @@ class DIContainer: ObservableObject {
     func newModelContext() -> ModelContext? {
         modelContainer?.mainContext
     }
+
+    // MARK: - Data Management
+
+    /// Clear all local SwiftData on logout for privacy
+    func clearAllLocalData() {
+        guard let context = modelContainer?.mainContext else {
+            print("[DIContainer] No model context available for clearing data")
+            return
+        }
+
+        do {
+            // Delete all records from each model type
+            try context.delete(model: CallRecord.self)
+            try context.delete(model: SavedPrompt.self)
+            try context.delete(model: EventLogEntry.self)
+            try context.delete(model: TranscriptEntry.self)
+            try context.delete(model: RecordingMetadata.self)
+            try context.delete(model: UserSettings.self)
+            try context.delete(model: FavoriteContact.self)
+
+            // Save the deletions
+            try context.save()
+
+            print("[DIContainer] Successfully cleared all local data")
+        } catch {
+            print("[DIContainer] Failed to clear local data: \(error)")
+        }
+    }
 }
 
 // MARK: - AppEnvironment
