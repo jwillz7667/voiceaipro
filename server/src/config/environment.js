@@ -76,9 +76,9 @@ const config = {
     corsOrigins: requireEnv('CORS_ORIGINS', '*').split(',').map(s => s.trim()),
     rateLimitWindowMs: requireEnvInt('RATE_LIMIT_WINDOW_MS', 60000),
     rateLimitMax: requireEnvInt('RATE_LIMIT_MAX', 100),
-    // Trust proxy for Railway/cloud deployments - default true unless explicitly disabled
-    // Railway sets RAILWAY_ENVIRONMENT, or we check NODE_ENV
-    trustProxy: process.env.TRUST_PROXY === 'false' ? false : true,
+    // Trust proxy for Railway/cloud deployments
+    // Auto-detect Railway environment and force true, otherwise use env var or default true
+    trustProxy: process.env.RAILWAY_ENVIRONMENT ? true : (process.env.TRUST_PROXY !== 'false'),
   },
 
   logging: {
