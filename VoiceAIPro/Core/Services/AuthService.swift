@@ -1,5 +1,8 @@
 import Foundation
 import Combine
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Authentication service for managing user sessions
 @MainActor
@@ -102,7 +105,7 @@ final class AuthService: ObservableObject {
             let result = try JSONDecoder().decode(RegisterResponse.self, from: data)
             return result.user
         } else {
-            let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data)
             throw AuthServiceError.serverError(
                 code: errorResponse?.error.code ?? "UNKNOWN",
                 message: errorResponse?.error.message ?? "Registration failed"
@@ -154,7 +157,7 @@ final class AuthService: ObservableObject {
             self.currentUser = result.user
             self.isAuthenticated = true
         } else {
-            let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data)
             throw AuthServiceError.serverError(
                 code: errorResponse?.error.code ?? "UNKNOWN",
                 message: errorResponse?.error.message ?? "Login failed"
@@ -288,7 +291,7 @@ final class AuthService: ObservableObject {
 
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data)
             throw AuthServiceError.serverError(
                 code: errorResponse?.error.code ?? "UNKNOWN",
                 message: errorResponse?.error.message ?? "Failed to request password reset"
@@ -320,7 +323,7 @@ final class AuthService: ObservableObject {
         } else if httpResponse.statusCode == 401 {
             throw AuthServiceError.sessionExpired
         } else {
-            let errorResponse = try? JSONDecoder().decode(ErrorResponse.self, from: data)
+            let errorResponse = try? JSONDecoder().decode(AuthErrorResponse.self, from: data)
             throw AuthServiceError.serverError(
                 code: errorResponse?.error.code ?? "UNKNOWN",
                 message: errorResponse?.error.message ?? "Failed to get user"
@@ -383,10 +386,11 @@ struct MeResponse: Codable {
     let user: AuthUser
 }
 
-struct ErrorResponse: Codable {
-    let error: APIError
+/// Auth-specific error response (server returns nested error object)
+private struct AuthErrorResponse: Codable {
+    let error: AuthAPIError
 
-    struct APIError: Codable {
+    struct AuthAPIError: Codable {
         let code: String
         let message: String
     }
