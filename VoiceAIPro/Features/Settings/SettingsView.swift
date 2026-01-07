@@ -3,7 +3,7 @@ import SwiftUI
 /// Main settings view with navigation to all configuration options
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
-    @StateObject private var authService = AuthService.shared
+    @ObservedObject private var authService = AuthService.shared
     @State private var showLogoutConfirmation = false
 
     var body: some View {

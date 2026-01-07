@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Login view for user authentication
 struct LoginView: View {
-    @StateObject private var authService = AuthService.shared
+    @ObservedObject private var authService = AuthService.shared
     @State private var email = ""
     @State private var password = ""
     @State private var showPassword = false

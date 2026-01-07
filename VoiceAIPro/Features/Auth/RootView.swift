@@ -3,7 +3,7 @@ import SwiftUI
 /// Root view that handles authentication gating
 /// Shows LoginView when not authenticated, ContentView when authenticated
 struct RootView: View {
-    @StateObject private var authService = AuthService.shared
+    @ObservedObject private var authService = AuthService.shared
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var container: DIContainer
 
