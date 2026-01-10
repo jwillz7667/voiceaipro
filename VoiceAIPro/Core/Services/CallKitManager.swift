@@ -259,10 +259,13 @@ extension CallKitManager: CXProviderDelegate {
 
     /// Handle start call action (outgoing call)
     func provider(_ provider: CXProvider, perform action: CXStartCallAction) {
-        // Configure audio session for outgoing call
+        // Configure and activate audio session for outgoing call
         do {
             try AudioSessionManager.shared.configureForVoIP()
+            try AudioSessionManager.shared.activateSession()
+            print("[CallKitManager] Audio session activated for outgoing call")
         } catch {
+            print("[CallKitManager] Failed to setup audio: \(error)")
             action.fail()
             return
         }
@@ -283,10 +286,13 @@ extension CallKitManager: CXProviderDelegate {
 
     /// Handle answer call action (incoming call)
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-        // Configure audio session
+        // Configure and activate audio session
         do {
             try AudioSessionManager.shared.configureForVoIP()
+            try AudioSessionManager.shared.activateSession()
+            print("[CallKitManager] Audio session activated for incoming call")
         } catch {
+            print("[CallKitManager] Failed to setup audio: \(error)")
             action.fail()
             return
         }

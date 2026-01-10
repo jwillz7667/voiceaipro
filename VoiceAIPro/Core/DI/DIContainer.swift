@@ -233,6 +233,7 @@ protocol APIClientProtocol {
     func savePrompt(_ prompt: Prompt) async throws -> Prompt
     func deletePrompt(id: UUID) async throws
     func getFullCallDetails(callSid: String) async throws -> FullCallDetailsResponse
+    func optimizePrompt(instructions: String) async throws -> String
 }
 
 /// Protocol for WebSocket client
@@ -623,6 +624,47 @@ class APIClient: APIClientProtocol {
 
         return try decoder.decode(FullCallDetailsResponse.self, from: data)
     }
+
+    func optimizePrompt(instructions: String) async throws -> String {
+        guard let url = URL(string: "\(baseURL)\(Constants.API.Endpoints.promptsOptimize)") else {
+            throw APIError.invalidURL
+        }
+
+        var request = await createRequest(url: url, method: "POST")
+
+        let body: [String: Any] = [
+            "instructions": instructions
+        ]
+
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse
+        }
+
+        // Parse response JSON
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw APIError.invalidResponse
+        }
+
+        // Handle error responses
+        if httpResponse.statusCode != 200 {
+            if let error = json["error"] as? [String: Any],
+               let message = error["message"] as? String {
+                throw APIError.serverErrorWithMessage(message)
+            }
+            throw APIError.serverError
+        }
+
+        // Extract optimized instructions
+        guard let optimizedInstructions = json["optimized_instructions"] as? String else {
+            throw APIError.invalidResponse
+        }
+
+        return optimizedInstructions
+    }
 }
 
 /// WebSocket client implementation for DI
@@ -809,6 +851,12 @@ class MockAPIClient: APIClientProtocol {
             statistics: nil
         )
     }
+
+    func optimizePrompt(instructions: String) async throws -> String {
+        // Simulate network delay
+        try await Task.sleep(nanoseconds: 500_000_000)
+        return "OPTIMIZED: \(instructions)"
+    }
 }
 
 class MockWebSocketClient: WebSocketClientProtocol {
@@ -837,6 +885,7 @@ class MockWebSocketClient: WebSocketClientProtocol {
 enum APIError: LocalizedError {
     case invalidURL
     case serverError
+    case serverErrorWithMessage(String)
     case invalidResponse
     case notConnected
     case tokenExpired
@@ -845,6 +894,7 @@ enum APIError: LocalizedError {
         switch self {
         case .invalidURL: return "Invalid URL"
         case .serverError: return "Server error"
+        case .serverErrorWithMessage(let message): return message
         case .invalidResponse: return "Invalid response"
         case .notConnected: return "Not connected"
         case .tokenExpired: return "Token expired"

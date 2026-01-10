@@ -325,9 +325,12 @@ class CallManager: ObservableObject {
         print("🔴 [CallManager] Session created: \(session.id)")
 
         do {
-            // Configure audio session
+            // Configure and activate audio session
             try audioSessionManager.configureForVoIP()
             print("🔴 [CallManager] Audio configured")
+
+            try audioSessionManager.activateSession()
+            print("🔴 [CallManager] Audio session activated")
 
             // Initiate call via API first (if needed for server-side setup)
             // This notifies the server to prepare the bridge
@@ -486,6 +489,11 @@ class CallManager: ObservableObject {
         callState = .connecting
 
         do {
+            // Configure and activate audio session before accepting
+            try audioSessionManager.configureForVoIP()
+            try audioSessionManager.activateSession()
+            print("📞 [CallManager] Audio session ready for incoming call")
+
             // Accept the call
             let call = try twilioService.acceptIncomingCall()
 

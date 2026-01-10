@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
 import { query, transaction } from '../db/pool.js';
 import { optionalAuth } from '../middleware/auth.js';
+import { optimizeVoicePrompt } from '../services/deepseekService.js';
 
 const router = Router();
 const logger = createLogger('routes:prompts');
@@ -114,6 +115,95 @@ router.get('/', async (req, res) => {
       error: {
         code: 'LIST_PROMPTS_FAILED',
         message: 'Failed to list prompts',
+        details: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Optimize prompt instructions using AI
+ * POST /api/prompts/optimize
+ * Body: { instructions: string, model?: string }
+ * Returns: { success: true, optimized_instructions: string }
+ *
+ * IMPORTANT: This route must be defined BEFORE /:id routes to avoid
+ * "optimize" being matched as an ID parameter
+ */
+router.post('/optimize', async (req, res) => {
+  try {
+    const { instructions, model } = req.body;
+
+    if (!instructions || typeof instructions !== 'string') {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions are required and must be a string',
+        },
+      });
+    }
+
+    const trimmedInstructions = instructions.trim();
+
+    if (trimmedInstructions.length < 10) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must be at least 10 characters',
+        },
+      });
+    }
+
+    if (trimmedInstructions.length > 10000) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must not exceed 10000 characters',
+        },
+      });
+    }
+
+    const optimizedInstructions = await optimizeVoicePrompt(trimmedInstructions, {
+      model: model || 'deepseek-chat',
+    });
+
+    logger.info('Prompt optimized successfully', {
+      originalLength: trimmedInstructions.length,
+      optimizedLength: optimizedInstructions.length,
+    });
+
+    res.json({
+      success: true,
+      optimized_instructions: optimizedInstructions,
+      original_length: trimmedInstructions.length,
+      optimized_length: optimizedInstructions.length,
+    });
+  } catch (error) {
+    logger.error('Failed to optimize prompt', error);
+
+    // Check for specific error types
+    if (error.message.includes('DEEPSEEK_API_KEY')) {
+      return res.status(503).json({
+        error: {
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Prompt optimization service is not configured',
+        },
+      });
+    }
+
+    if (error.message.includes('API error')) {
+      return res.status(502).json({
+        error: {
+          code: 'UPSTREAM_ERROR',
+          message: 'Failed to connect to optimization service',
+        },
+      });
+    }
+
+    res.status(500).json({
+      error: {
+        code: 'OPTIMIZE_PROMPT_FAILED',
+        message: 'Failed to optimize prompt',
         details: error.message,
       },
     });

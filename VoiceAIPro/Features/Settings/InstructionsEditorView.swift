@@ -1,18 +1,76 @@
 import SwiftUI
 
-/// System instructions editor with preview
+/// System instructions editor with AI optimization
 struct InstructionsEditorView: View {
+    @EnvironmentObject var container: DIContainer
     @Binding var instructions: String
     @Environment(\.dismiss) private var dismiss
 
     @State private var editedInstructions: String = ""
     @State private var showingTemplates = false
+    @State private var isOptimizing = false
+    @State private var optimizeError: String?
 
     private let characterLimit = 10000
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Optimize toolbar at top of text box
+                HStack {
+                    Text("Instructions")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    if isOptimizing {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text("Optimizing...")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.purple)
+                        }
+                    } else {
+                        Button(action: optimizeInstructions) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 12, weight: .semibold))
+                                Text("Optimize")
+                                    .font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundColor(canOptimize ? .purple : .gray)
+                        }
+                        .disabled(!canOptimize)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color(.tertiarySystemBackground))
+
+                // Error banner
+                if let error = optimizeError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.system(size: 14))
+                        Text(error)
+                            .font(.system(size: 13))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Button {
+                            optimizeError = nil
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.1))
+                }
+
                 // Editor
                 ZStack(alignment: .topLeading) {
                     if editedInstructions.isEmpty {
@@ -27,12 +85,14 @@ struct InstructionsEditorView: View {
                         .padding(.vertical, 8)
                         .scrollContentBackground(.hidden)
                         .background(Color(.systemBackground))
+                        .disabled(isOptimizing)
+                        .opacity(isOptimizing ? 0.6 : 1)
                 }
                 .frame(maxHeight: .infinity)
 
                 Divider()
 
-                // Footer with character count
+                // Footer with character count and templates
                 HStack {
                     Button(action: {
                         showingTemplates = true
@@ -44,6 +104,7 @@ struct InstructionsEditorView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.blue)
                     }
+                    .disabled(isOptimizing)
 
                     Spacer()
 
@@ -64,13 +125,14 @@ struct InstructionsEditorView: View {
                     Button("Cancel") {
                         dismiss()
                     }
+                    .disabled(isOptimizing)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         instructions = editedInstructions
                         dismiss()
                     }
-                    .disabled(editedInstructions.count > characterLimit)
+                    .disabled(editedInstructions.count > characterLimit || isOptimizing)
                 }
             }
             .onAppear {
@@ -79,6 +141,45 @@ struct InstructionsEditorView: View {
             .sheet(isPresented: $showingTemplates) {
                 InstructionTemplatesSheet { template in
                     editedInstructions = template.content
+                }
+            }
+        }
+    }
+
+    private var canOptimize: Bool {
+        let trimmed = editedInstructions.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count >= 10 && !isOptimizing
+    }
+
+    private func optimizeInstructions() {
+        guard canOptimize else { return }
+
+        isOptimizing = true
+        optimizeError = nil
+
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        Task {
+            do {
+                let optimized = try await container.apiClient.optimizePrompt(
+                    instructions: editedInstructions
+                )
+
+                await MainActor.run {
+                    editedInstructions = optimized
+                    isOptimizing = false
+
+                    let successGenerator = UINotificationFeedbackGenerator()
+                    successGenerator.notificationOccurred(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isOptimizing = false
+                    optimizeError = error.localizedDescription
+
+                    let errorGenerator = UINotificationFeedbackGenerator()
+                    errorGenerator.notificationOccurred(.error)
                 }
             }
         }
@@ -246,6 +347,7 @@ struct InstructionTemplate: Identifiable {
 
 /// Settings row that navigates to instructions editor
 struct InstructionsSettingsRow: View {
+    @EnvironmentObject var container: DIContainer
     @Binding var instructions: String
     @State private var showingEditor = false
 
@@ -285,6 +387,7 @@ struct InstructionsSettingsRow: View {
         }
         .sheet(isPresented: $showingEditor) {
             InstructionsEditorView(instructions: $instructions)
+                .environmentObject(container)
         }
     }
 }
@@ -292,5 +395,6 @@ struct InstructionsSettingsRow: View {
 #Preview {
     NavigationStack {
         InstructionsEditorView(instructions: .constant("You are a helpful AI assistant."))
+            .environmentObject(DIContainer.shared)
     }
 }

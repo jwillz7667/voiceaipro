@@ -43,6 +43,7 @@ enum Constants {
             static let callsHistory = "/api/calls/history"
             static let recordings = "/api/recordings"
             static let prompts = "/api/prompts"
+            static let promptsOptimize = "/api/prompts/optimize"
             static let events = "/api/events"
             static let sessionConfig = "/api/session/config"
         }
