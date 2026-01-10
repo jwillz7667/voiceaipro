@@ -426,8 +426,13 @@ function buildSessionConfig(cfg) {
     sessionConfig.audio.input.turn_detection = null;
   } else if (vadType === 'semantic_vad') {
     const turnDetection = { type: 'semantic_vad' };
-    if (cfg.vadConfig?.eagerness) {
-      turnDetection.eagerness = cfg.vadConfig.eagerness;
+    // Force 'high' eagerness - 'auto' was causing speech_stopped to never fire
+    turnDetection.eagerness = cfg.vadConfig?.eagerness || 'high';
+    if (turnDetection.eagerness === 'auto') {
+      logger.warn('⚠️ [VAD] Overriding eagerness from "auto" to "high" - auto causes issues', {
+        originalEagerness: cfg.vadConfig?.eagerness,
+      });
+      turnDetection.eagerness = 'high';
     }
     if (cfg.vadConfig?.createResponse !== undefined) {
       turnDetection.create_response = cfg.vadConfig.createResponse;
