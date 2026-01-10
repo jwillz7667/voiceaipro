@@ -367,6 +367,17 @@ function sendSessionConfig(session) {
     configKeys: Object.keys(sessionConfig),
   });
 
+  // Trigger initial AI response - makes AI speak first without waiting for user
+  // This is important for scenarios where AI should initiate (e.g., outbound calls)
+  setTimeout(() => {
+    logger.info('🚀 [RESPONSE] Triggering initial AI response', {
+      callSid: session.callSid,
+    });
+    session.sendToOpenAI({
+      type: 'response.create',
+    });
+  }, 500); // Small delay to ensure session.update is processed first
+
   // Log to database
   logEvent(session.id, 'session.config_sent', 'outgoing', sessionConfig).catch((err) => {
     logger.error('Failed to log session config event', { error: err.message });
