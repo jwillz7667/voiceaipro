@@ -514,6 +514,14 @@ function getDefaultInstructions() {
 function handleOpenAIMessage(session, message, state) {
   const eventType = message.type;
 
+  // Log ALL events from OpenAI for debugging
+  logger.info(`🔷 [OPENAI] Event received: ${eventType}`, {
+    callSid: session.callSid,
+    eventType,
+    hasError: !!message.error,
+    responseId: message.response?.id || message.response_id,
+  });
+
   // Log event to session
   session.addEvent(eventType, 'incoming', message);
 
@@ -643,12 +651,14 @@ function handleSpeechStarted(session, message, state) {
   const vadConfig = session.config?.vadConfig;
   const openaiHandlesInterruption = vadConfig?.interruptResponse !== false;
 
-  logger.debug('Speech started', {
+  logger.info('🎙️ [VAD] Speech started detected by OpenAI', {
     callSid: session.callSid,
     audioStartMs,
     wasResponding: state.isResponding,
     wasPlayingAudio: state.isPlayingAudio,
     openaiHandlesInterruption,
+    vadType: session.config?.vadType,
+    vadEagerness: vadConfig?.eagerness,
   });
 
   // INTERRUPTION: If AI is currently speaking
@@ -687,9 +697,10 @@ function handleSpeechStarted(session, message, state) {
 function handleSpeechStopped(session, message, state) {
   const audioEndMs = message.audio_end_ms;
 
-  logger.debug('Speech stopped', {
+  logger.info('🎙️ [VAD] Speech stopped detected by OpenAI', {
     callSid: session.callSid,
     audioEndMs,
+    fullMessage: JSON.stringify(message),
   });
 
   session.broadcastEvent('speech.stopped', {
@@ -698,9 +709,10 @@ function handleSpeechStopped(session, message, state) {
 }
 
 function handleAudioBufferCommitted(session, message, state) {
-  logger.trace('Audio buffer committed', {
+  logger.info('🎙️ [VAD] Audio buffer committed - speech utterance captured', {
     callSid: session.callSid,
     itemId: message.item_id,
+    previousItemId: message.previous_item_id,
   });
 }
 
