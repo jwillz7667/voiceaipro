@@ -514,13 +514,17 @@ function getDefaultInstructions() {
 function handleOpenAIMessage(session, message, state) {
   const eventType = message.type;
 
-  // Log ALL events from OpenAI for debugging
-  logger.info(`🔷 [OPENAI] Event received: ${eventType}`, {
-    callSid: session.callSid,
-    eventType,
-    hasError: !!message.error,
-    responseId: message.response?.id || message.response_id,
-  });
+  // Log important events from OpenAI (reduced logging to avoid Railway rate limit)
+  const importantEvents = ['session.created', 'session.updated', 'error', 'response.created',
+    'response.done', 'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped',
+    'input_audio_buffer.committed', 'response.audio.delta', 'response.output_audio.delta'];
+  if (importantEvents.includes(eventType) || message.error) {
+    logger.info(`🔷 [OPENAI] Event: ${eventType}`, {
+      callSid: session.callSid,
+      hasError: !!message.error,
+      errorMsg: message.error?.message,
+    });
+  }
 
   // Log event to session
   session.addEvent(eventType, 'incoming', message);
