@@ -616,14 +616,16 @@ function handleSessionCreated(session, message, state) {
 function handleSessionUpdated(session, message, state) {
   const appliedSession = message.session || {};
 
-  logger.info('OpenAI session updated', {
+  logger.info('🟢 [SESSION] OpenAI session.updated received - Session is now ready for audio', {
     callSid: session.callSid,
     sessionId: state.sessionId,
-    voice: appliedSession.voice,
+    voice: appliedSession.voice || appliedSession.audio?.output?.voice,
     inputFormat: appliedSession.input_audio_format,
     outputFormat: appliedSession.output_audio_format,
-    turnDetection: appliedSession.turn_detection?.type,
+    turnDetection: appliedSession.turn_detection?.type || appliedSession.audio?.input?.turn_detection?.type,
+    turnDetectionEagerness: appliedSession.turn_detection?.eagerness || appliedSession.audio?.input?.turn_detection?.eagerness,
     instructionsLength: appliedSession.instructions?.length,
+    modalities: appliedSession.modalities || appliedSession.output_modalities,
     fullSession: JSON.stringify(appliedSession),
   });
 

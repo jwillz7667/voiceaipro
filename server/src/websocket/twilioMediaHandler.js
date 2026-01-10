@@ -241,6 +241,11 @@ export function handleTwilioMediaStream(ws, request) {
       audioBuffer.destroy();
       sessionBuffers.delete(callSid);
     }
+
+    // Log final audio send stats
+    if (callSid) {
+      cleanupAudioSendStats(callSid);
+    }
   }
 
   /**
@@ -459,10 +464,25 @@ export function handleTwilioMediaStream(ws, request) {
    * Convert μ-law 8kHz to PCM16 24kHz and buffer for OpenAI
    */
   function handleMedia(message) {
+    // Log first media event
+    if (audioSequence === 0) {
+      logger.info('🎤 [MEDIA] First audio chunk received from Twilio', {
+        callSid,
+        hasSession: !!session,
+        hasOpenaiWs: !!session?.openaiWs,
+        openaiWsState: session?.openaiWs?.readyState,
+      });
+    }
+
     // Skip if OpenAI not connected
     if (!session || !session.openaiWs) {
-      if (audioSequence === 0) {
-        logger.trace('Dropping audio - OpenAI not connected', { callSid });
+      if (audioSequence === 0 || audioSequence % 100 === 0) {
+        logger.warn('🔴 [MEDIA] Dropping audio - OpenAI not connected', {
+          callSid,
+          audioSequence,
+          hasSession: !!session,
+          hasOpenaiWs: !!session?.openaiWs,
+        });
       }
       return;
     }
@@ -619,26 +639,44 @@ export function handleTwilioMediaStream(ws, request) {
   }
 }
 
+// Track audio chunks sent per session for debugging
+const audioSendStats = new Map();
+
 /**
  * Send buffered PCM16 audio samples to OpenAI
  * @param {Object} session - The call session
  * @param {Int16Array} samples - Audio samples to send
  */
 function sendBufferedAudioToOpenAI(session, samples) {
+  // Initialize stats for this session
+  if (!audioSendStats.has(session.callSid)) {
+    audioSendStats.set(session.callSid, { sent: 0, dropped: 0, errors: 0 });
+  }
+  const stats = audioSendStats.get(session.callSid);
+
   if (!session.openaiWs) {
-    logger.warn('Cannot send audio to OpenAI - WebSocket not initialized', {
-      callSid: session.callSid,
-      samplesCount: samples.length,
-    });
+    stats.dropped++;
+    if (stats.dropped === 1 || stats.dropped % 50 === 0) {
+      logger.warn('🔴 [AUDIO] Cannot send audio to OpenAI - WebSocket not initialized', {
+        callSid: session.callSid,
+        samplesCount: samples.length,
+        droppedCount: stats.dropped,
+      });
+    }
     return;
   }
 
   if (session.openaiWs.readyState !== 1) {
-    logger.warn('Cannot send audio to OpenAI - WebSocket not open', {
-      callSid: session.callSid,
-      readyState: session.openaiWs.readyState,
-      samplesCount: samples.length,
-    });
+    stats.dropped++;
+    if (stats.dropped === 1 || stats.dropped % 50 === 0) {
+      logger.warn('🔴 [AUDIO] Cannot send audio to OpenAI - WebSocket not open', {
+        callSid: session.callSid,
+        readyState: session.openaiWs.readyState,
+        readyStateNames: ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'],
+        samplesCount: samples.length,
+        droppedCount: stats.dropped,
+      });
+    }
     return;
   }
 
@@ -647,15 +685,64 @@ function sendBufferedAudioToOpenAI(session, samples) {
   const base64Audio = buffer.toString('base64');
 
   try {
-    session.sendToOpenAI({
+    const sent = session.sendToOpenAI({
       type: 'input_audio_buffer.append',
       audio: base64Audio,
     });
+
+    if (sent) {
+      stats.sent++;
+      // Log first successful send and periodically after
+      if (stats.sent === 1) {
+        logger.info('🟢 [AUDIO] First audio chunk sent to OpenAI successfully', {
+          callSid: session.callSid,
+          samplesCount: samples.length,
+          base64Length: base64Audio.length,
+        });
+      } else if (stats.sent % 100 === 0) {
+        logger.debug('🟢 [AUDIO] Audio send progress', {
+          callSid: session.callSid,
+          chunksSent: stats.sent,
+          chunksDropped: stats.dropped,
+        });
+      }
+    } else {
+      stats.errors++;
+      logger.warn('🔴 [AUDIO] sendToOpenAI returned false', {
+        callSid: session.callSid,
+        errorCount: stats.errors,
+      });
+    }
   } catch (error) {
-    logger.error('Failed to send audio to OpenAI', {
+    stats.errors++;
+    logger.error('🔴 [AUDIO] Failed to send audio to OpenAI', {
       callSid: session.callSid,
       error: error.message,
+      errorCount: stats.errors,
     });
+  }
+}
+
+/**
+ * Get audio send stats for debugging
+ */
+export function getAudioSendStats(callSid) {
+  return audioSendStats.get(callSid) || { sent: 0, dropped: 0, errors: 0 };
+}
+
+/**
+ * Clean up audio send stats for a session
+ */
+function cleanupAudioSendStats(callSid) {
+  const stats = audioSendStats.get(callSid);
+  if (stats) {
+    logger.info('🔵 [AUDIO] Final audio send stats', {
+      callSid,
+      chunksSent: stats.sent,
+      chunksDropped: stats.dropped,
+      errors: stats.errors,
+    });
+    audioSendStats.delete(callSid);
   }
 }
 
@@ -842,4 +929,5 @@ export default {
   sendMarkToTwilio,
   clearTwilioBuffer,
   getBufferStats,
+  getAudioSendStats,
 };
