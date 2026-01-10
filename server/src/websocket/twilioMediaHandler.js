@@ -625,7 +625,20 @@ export function handleTwilioMediaStream(ws, request) {
  * @param {Int16Array} samples - Audio samples to send
  */
 function sendBufferedAudioToOpenAI(session, samples) {
-  if (!session.openaiWs || session.openaiWs.readyState !== 1) {
+  if (!session.openaiWs) {
+    logger.warn('Cannot send audio to OpenAI - WebSocket not initialized', {
+      callSid: session.callSid,
+      samplesCount: samples.length,
+    });
+    return;
+  }
+
+  if (session.openaiWs.readyState !== 1) {
+    logger.warn('Cannot send audio to OpenAI - WebSocket not open', {
+      callSid: session.callSid,
+      readyState: session.openaiWs.readyState,
+      samplesCount: samples.length,
+    });
     return;
   }
 
@@ -633,10 +646,17 @@ function sendBufferedAudioToOpenAI(session, samples) {
   const buffer = Buffer.from(samples.buffer, samples.byteOffset, samples.byteLength);
   const base64Audio = buffer.toString('base64');
 
-  session.sendToOpenAI({
-    type: 'input_audio_buffer.append',
-    audio: base64Audio,
-  });
+  try {
+    session.sendToOpenAI({
+      type: 'input_audio_buffer.append',
+      audio: base64Audio,
+    });
+  } catch (error) {
+    logger.error('Failed to send audio to OpenAI', {
+      callSid: session.callSid,
+      error: error.message,
+    });
+  }
 }
 
 /**

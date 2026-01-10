@@ -131,9 +131,10 @@ function buildOpenAIUrl(sessionConfig) {
   // Model - required in URL
   params.set('model', sessionConfig.model || config.openai.defaultModel);
 
-  // Audio formats for Twilio (μ-law 8kHz) - required in URL for proper codec
-  params.set('input_audio_format', 'g711_ulaw');
-  params.set('output_audio_format', 'g711_ulaw');
+  // Audio formats - PCM16 24kHz (we convert from/to μ-law in the bridge)
+  // The bridge handles: Twilio μ-law 8kHz <-> PCM16 24kHz <-> OpenAI
+  params.set('input_audio_format', 'pcm16');
+  params.set('output_audio_format', 'pcm16');
 
   // Note: voice and turn_detection are configured via session.update
   // to allow mid-session changes and proper nested structure
@@ -470,9 +471,8 @@ function buildSessionConfig(cfg) {
   // === AUDIO OUTPUT CONFIG ===
 
   // Voice (marin and cedar recommended for GA; also: alloy, echo, shimmer, ash, ballad, coral, sage, verse)
-  if (cfg.voice) {
-    sessionConfig.audio.output.voice = cfg.voice;
-  }
+  // Always set a voice - default to 'marin' if not specified
+  sessionConfig.audio.output.voice = cfg.voice || 'marin';
 
   // Voice speed (0.25 to 4.0, default 1.0)
   if (cfg.voiceSpeed !== undefined && cfg.voiceSpeed !== 1.0) {
