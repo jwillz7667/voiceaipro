@@ -59,7 +59,17 @@ export function authenticate(options = {}) {
         next();
       } catch (error) {
         if (error instanceof AuthError) {
-          const statusCode = error.code === 'ACCESS_TOKEN_EXPIRED' ? 401 : 401;
+          // If auth is optional and token is expired/invalid, continue without user
+          if (!required) {
+            logger.debug('Optional auth failed, continuing without user', {
+              code: error.code,
+              message: error.message,
+            });
+            req.user = null;
+            return next();
+          }
+
+          const statusCode = 401;
           return res.status(statusCode).json({
             error: {
               code: error.code,
