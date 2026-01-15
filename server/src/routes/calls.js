@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import twilio from 'twilio';
 import config from '../config/environment.js';
 import { createLogger } from '../utils/logger.js';
 import connectionManager from '../websocket/connectionManager.js';

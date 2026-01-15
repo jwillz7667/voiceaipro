@@ -5,9 +5,8 @@
  * Produces valid WAV files with proper headers.
  */
 
-import fs from 'fs';
+import fs, { createReadStream, createWriteStream } from 'fs';
 import path from 'path';
-import { createReadStream, createWriteStream } from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import config from '../config/environment.js';
 import { createLogger } from '../utils/logger.js';
@@ -24,7 +23,7 @@ const BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8;
 
 // Buffer settings
 const MIX_BUFFER_SIZE = SAMPLE_RATE * 0.5;  // 500ms of audio before mixing
-const MAX_BUFFER_SIZE = SAMPLE_RATE * 5;    // 5 seconds max buffer
+const _MAX_BUFFER_SIZE = SAMPLE_RATE * 5;    // 5 seconds max buffer - reserved for future overflow handling
 
 /**
  * Recording Session class
@@ -464,8 +463,8 @@ export async function stopRecording(callSid) {
       logger.info('Recording too short, discarding', { callSid });
       try {
         await fs.promises.unlink(metadata.storagePath);
-      } catch (e) {
-        // Ignore
+      } catch (_e) {
+        // Ignore - file may not exist
       }
       activeRecordings.delete(callSid);
       return null;
@@ -650,7 +649,7 @@ export async function getStorageStats() {
           totalSize += stats.size;
           fileCount++;
         }
-      } catch (e) {
+      } catch (_e) {
         // Ignore individual file errors
       }
     }
@@ -703,8 +702,8 @@ export async function cleanupOrphanedFiles() {
           deletedCount++;
           deletedSize += stats.size;
           logger.info('Deleted orphaned recording file', { filePath });
-        } catch (e) {
-          // Ignore errors
+        } catch (_e) {
+          // Ignore errors - file may be locked or already deleted
         }
       }
     }
@@ -741,8 +740,8 @@ export async function abortRecording(callSid) {
 
   try {
     await fs.promises.unlink(session.storagePath);
-  } catch (e) {
-    // Ignore
+  } catch (_e) {
+    // Ignore - file may not exist
   }
 
   activeRecordings.delete(callSid);

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '../utils/logger.js';
-import { query, transaction } from '../db/pool.js';
+import { query } from '../db/pool.js';
 import connectionManager from '../websocket/connectionManager.js';
 
 const logger = createLogger('event-logger');

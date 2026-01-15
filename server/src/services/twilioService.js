@@ -160,13 +160,13 @@ export async function updateCall(callSid, options) {
   return call;
 }
 
-export async function muteCall(callSid, mute = true) {
+export function muteCall(callSid, mute = true) {
   logger.info(`${mute ? 'Muting' : 'Unmuting'} call`, { callSid });
 
   return updateCall(callSid, { muted: mute });
 }
 
-export async function holdCall(callSid, hold = true) {
+export function holdCall(callSid, hold = true) {
   logger.info(`${hold ? 'Putting' : 'Taking'} call ${hold ? 'on' : 'off'} hold`, { callSid });
 
   return updateCall(callSid, {
@@ -174,16 +174,14 @@ export async function holdCall(callSid, hold = true) {
   });
 }
 
-export async function sendDigits(callSid, digits) {
+export function sendDigits(callSid, digits) {
   logger.info('Sending DTMF digits', { callSid, digits: digits.replace(/\d/g, '*') });
 
   return updateCall(callSid, { sendDigits: digits });
 }
 
-export async function transferCall(callSid, transferTo, options = {}) {
+export function transferCall(callSid, transferTo, options = {}) {
   logger.info('Transferring call', { callSid, transferTo });
-
-  const baseUrl = process.env.SERVER_URL || `https://${process.env.RAILWAY_PUBLIC_DOMAIN || 'localhost:3000'}`;
 
   const twiml = `
     <Response>

@@ -146,7 +146,7 @@ export function handleIOSClientConnection(ws, request) {
   }
 
   function handleAuth(ws, payload, context) {
-    const { device_id, token } = payload || {};
+    const { device_id, token: _token } = payload || {};
 
     if (!device_id) {
       sendError(ws, 'AUTH_FAILED', 'Missing device_id');
@@ -337,12 +337,12 @@ export function handleIOSClientConnection(ws, request) {
     }
   }
 
-  function handleGetSessions(ws, context) {
+  function handleGetSessions(ws, _context) {
     const sessions = connectionManager.getActiveSessions().map((s) => s.toJSON());
     sendMessage(ws, 'sessions', { sessions });
   }
 
-  function handleGetSession(ws, payload, context) {
+  function handleGetSession(ws, payload, _context) {
     const { call_sid } = payload || {};
 
     if (!call_sid) {
@@ -361,7 +361,7 @@ export function handleIOSClientConnection(ws, request) {
     }
   }
 
-  function handleGetEvents(ws, payload, context) {
+  function handleGetEvents(ws, payload, _context) {
     const { call_sid, limit, offset } = payload || {};
 
     if (!call_sid) {

@@ -168,7 +168,7 @@ class CallSession {
     }
 
     // Send to all event stream subscribers on this session
-    this.eventSubscribers.forEach((ws, index) => {
+    this.eventSubscribers.forEach((ws, _index) => {
       if (ws.readyState === 1) {
         try {
           ws.send(message);
@@ -530,7 +530,7 @@ class ConnectionManager {
   /**
    * Save session data (including transcripts) to database
    */
-  async _saveSessionToDatabase(session, durationSeconds, reason) {
+  async _saveSessionToDatabase(session, durationSeconds, _reason) {
     try {
       // Update call session status in database
       await query(
@@ -685,7 +685,7 @@ class ConnectionManager {
   cleanup() {
     logger.info('Cleaning up connection manager');
 
-    for (const [callSid, session] of this.sessions) {
+    for (const [callSid, _session] of this.sessions) {
       this.destroySession(callSid, 'server_shutdown');
     }
 

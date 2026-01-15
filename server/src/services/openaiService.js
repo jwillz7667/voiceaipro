@@ -1,4 +1,3 @@
-import config from '../config/environment.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('openai-service');

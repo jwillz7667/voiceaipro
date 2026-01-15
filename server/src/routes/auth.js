@@ -9,7 +9,6 @@ import {
   resetPassword,
   verifyRefreshToken,
   generateAccessToken,
-  generateRefreshToken,
   revokeRefreshToken,
   revokeAllUserTokens,
   hashToken,
@@ -44,7 +43,7 @@ router.post('/register', async (req, res) => {
     // For now, log the token (in production, send via email)
     logger.info('Verification token generated', {
       userId: user.id,
-      token: verificationToken.substring(0, 8) + '...',
+      token: `${verificationToken.substring(0, 8)  }...`,
     });
 
     res.status(201).json({
@@ -303,7 +302,7 @@ router.post('/forgot-password', async (req, res) => {
       // TODO: Send password reset email
       logger.info('Password reset token generated', {
         userId: result.user.id,
-        token: result.resetToken.substring(0, 8) + '...',
+        token: `${result.resetToken.substring(0, 8)  }...`,
       });
 
       // Include token in dev mode for testing
