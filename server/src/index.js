@@ -7,7 +7,7 @@ import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 
 import config, { validateEnvironment } from './config/environment.js';
-import logger, { requestLogger, createLogger } from './utils/logger.js';
+import { requestLogger, createLogger } from './utils/logger.js';
 import { testConnection, closePool, getPoolStats } from './db/pool.js';
 import connectionManager from './websocket/connectionManager.js';
 import { handleTwilioMediaStream } from './websocket/twilioMediaHandler.js';
@@ -214,7 +214,7 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
-app.use((req, res, next) => {
+app.use((req, res, _next) => {
   res.status(404).json({
     error: {
       code: 'NOT_FOUND',
@@ -223,7 +223,8 @@ app.use((req, res, next) => {
   });
 });
 
-app.use((err, req, res, next) => {
+// Express requires 4 parameters for error handlers, even if next is unused
+app.use((err, req, res, _next) => {
   appLogger.error('Unhandled error', err);
 
   res.status(err.status || 500).json({

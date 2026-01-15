@@ -23,7 +23,7 @@
 
 import { createLogger } from '../utils/logger.js';
 import connectionManager from './connectionManager.js';
-import { mulawBase64ToPCM16Base64, AudioChunkBuffer } from '../audio/converter.js';
+import { mulawBase64ToPCM16Base64 } from '../audio/converter.js';
 import { connectToOpenAI } from './openaiRealtimeHandler.js';
 import { logEvent, logTranscript } from '../services/eventLogger.js';
 import { startRecording, appendUserAudio, stopRecording } from '../services/recordingService.js';
@@ -491,8 +491,8 @@ export function handleTwilioMediaStream(ws, request) {
 
     // Extract μ-law audio (base64 encoded)
     const mulawBase64 = message.media.payload;
-    const timestamp = message.media.timestamp;
-    const track = message.media.track; // 'inbound' or 'outbound'
+    const _timestamp = message.media.timestamp; // Reserved for timing analysis
+    const _track = message.media.track; // 'inbound' or 'outbound' - reserved for stereo recording
 
     // Track audio duration (~20ms per Twilio chunk at 8kHz with 160 samples)
     totalAudioMs += 20;
@@ -565,7 +565,7 @@ export function handleTwilioMediaStream(ws, request) {
    * Handle 'stop' event - Media stream has ended
    * Finalize recording, calculate duration, clean up
    */
-  async function handleStop(message) {
+  async function handleStop(_message) {
     const callEndTime = Date.now();
     const durationMs = callStartTime ? callEndTime - callStartTime : 0;
     const durationSeconds = Math.floor(durationMs / 1000);

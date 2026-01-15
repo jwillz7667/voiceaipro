@@ -15,7 +15,7 @@ const poolConfig = {
 
 const pool = new pg.Pool(poolConfig);
 
-pool.on('connect', (client) => {
+pool.on('connect', (_client) => {
   logger.debug('New database connection established', {
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,
@@ -23,11 +23,11 @@ pool.on('connect', (client) => {
   });
 });
 
-pool.on('error', (err, client) => {
+pool.on('error', (err, _client) => {
   logger.error('Unexpected database pool error', err);
 });
 
-pool.on('remove', (client) => {
+pool.on('remove', (_client) => {
   logger.debug('Database connection removed from pool', {
     totalCount: pool.totalCount,
     idleCount: pool.idleCount,

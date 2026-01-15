@@ -18,14 +18,14 @@ const LOGIN_LOCKOUT_MINUTES = 15;
 /**
  * Hash a password using bcrypt
  */
-export async function hashPassword(password) {
+export function hashPassword(password) {
   return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
 /**
  * Verify a password against a hash
  */
-export async function verifyPassword(password, hash) {
+export function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 

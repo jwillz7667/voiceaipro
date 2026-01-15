@@ -149,7 +149,7 @@ function buildOpenAIUrl(sessionConfig) {
  * @param {Object} session - The call session from connectionManager
  * @returns {Promise<WebSocket>} - Resolves with WebSocket when session is ready
  */
-export async function connectToOpenAI(session) {
+export function connectToOpenAI(session) {
   return new Promise((resolve, reject) => {
     // Build URL with session-specific config (voice, VAD, etc.)
     const url = buildOpenAIUrl(session.config);
@@ -351,7 +351,7 @@ function sendSessionConfig(session) {
       type: sessionConfig.type,
       output_modalities: sessionConfig.output_modalities,
       instructionsLength: sessionConfig.instructions?.length,
-      instructionsPreview: sessionConfig.instructions?.substring(0, 100) + '...',
+      instructionsPreview: `${sessionConfig.instructions?.substring(0, 100)  }...`,
       audioInput: sessionConfig.audio?.input,
       audioOutput: sessionConfig.audio?.output,
     },
@@ -714,7 +714,7 @@ function handleSpeechStarted(session, message, state) {
   });
 }
 
-function handleSpeechStopped(session, message, state) {
+function handleSpeechStopped(session, message, _state) {
   const audioEndMs = message.audio_end_ms;
 
   logger.info('🎙️ [VAD] Speech stopped detected by OpenAI', {
@@ -728,7 +728,7 @@ function handleSpeechStopped(session, message, state) {
   });
 }
 
-function handleAudioBufferCommitted(session, message, state) {
+function handleAudioBufferCommitted(session, message, _state) {
   logger.info('🎙️ [VAD] Audio buffer committed - speech utterance captured', {
     callSid: session.callSid,
     itemId: message.item_id,
@@ -736,7 +736,7 @@ function handleAudioBufferCommitted(session, message, state) {
   });
 }
 
-function handleConversationItemCreated(session, message, state) {
+function handleConversationItemCreated(session, message, _state) {
   const item = message.item;
 
   logger.debug('Conversation item created', {
@@ -750,7 +750,7 @@ function handleConversationItemCreated(session, message, state) {
 /**
  * Handle completed user transcription
  */
-function handleInputTranscription(session, message, state) {
+function handleInputTranscription(session, message, _state) {
   const transcript = message.transcript;
   const itemId = message.item_id;
 
@@ -779,7 +779,7 @@ function handleInputTranscription(session, message, state) {
 
     logger.info('User transcript', {
       callSid: session.callSid,
-      text: transcript.length > 100 ? transcript.substring(0, 100) + '...' : transcript,
+      text: transcript.length > 100 ? `${transcript.substring(0, 100)  }...` : transcript,
     });
 
     // Log to database
@@ -810,7 +810,7 @@ function handleResponseCreated(session, message, state) {
   });
 }
 
-function handleOutputItemAdded(session, message, state) {
+function handleOutputItemAdded(session, message, _state) {
   logger.trace('Output item added', {
     callSid: session.callSid,
     itemId: message.item?.id,
@@ -924,7 +924,7 @@ function handleTranscriptDone(session, message, state) {
 
     logger.info('Assistant transcript', {
       callSid: session.callSid,
-      text: transcript.length > 100 ? transcript.substring(0, 100) + '...' : transcript,
+      text: transcript.length > 100 ? `${transcript.substring(0, 100)  }...` : transcript,
     });
 
     // Log to database
@@ -995,7 +995,7 @@ function handleResponseCancelled(session, message, state) {
 /**
  * Handle rate limits update
  */
-function handleRateLimitsUpdated(session, message, state) {
+function handleRateLimitsUpdated(session, message, _state) {
   const rateLimits = message.rate_limits;
 
   logger.debug('Rate limits updated', {
@@ -1009,7 +1009,7 @@ function handleRateLimitsUpdated(session, message, state) {
 /**
  * Handle error from OpenAI
  */
-function handleError(session, message, state) {
+function handleError(session, message, _state) {
   const error = message.error;
 
   // Log full error object to diagnose issues

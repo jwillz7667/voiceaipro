@@ -10,7 +10,7 @@ const logger = createLogger('middleware:auth');
 export function authenticate(options = {}) {
   const { required = true } = options;
 
-  return async (req, res, next) => {
+  return (req, res, next) => {
     try {
       const authHeader = req.headers.authorization;
 
@@ -134,7 +134,7 @@ export function extractDeviceInfo(req) {
  * Supports both authenticated users and legacy device_id-based identification
  */
 export function legacyDeviceSupport() {
-  return async (req, res, next) => {
+  return (req, res, next) => {
     // If already authenticated, use user ID
     if (req.user) {
       return next();

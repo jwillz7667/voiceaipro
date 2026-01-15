@@ -234,7 +234,7 @@ export async function getUserDefaultPrompt(userId) {
  * @param {string} promptId - Prompt UUID to set as default
  * @returns {Promise<Object|null>} Updated prompt or null if not found
  */
-export async function setDefaultPrompt(userId, promptId) {
+export function setDefaultPrompt(userId, promptId) {
   return transaction(async (client) => {
     // Clear existing user defaults
     await client.query(

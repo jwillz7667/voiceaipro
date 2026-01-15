@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
-async function getMigrationsConnection() {
+function getMigrationsConnection() {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {

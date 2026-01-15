@@ -32,7 +32,7 @@ const logger = createLogger('audio:converter');
 const MULAW_ENCODE_BIAS = 33;   // 0x21 - bias for encoding
 const MULAW_DECODE_BIAS = 0x84; // 132 - bias for decoding reconstruction
 const MULAW_CLIP = 32635;       // Maximum sample value before clipping
-const MULAW_MAX = 0x1FFF;       // Maximum biased sample value (8191)
+const _MULAW_MAX = 0x1FFF;       // Maximum biased sample value (8191) - reserved for future use
 
 // Sample rates
 const SAMPLE_RATE_TWILIO = 8000;   // 8kHz for Twilio

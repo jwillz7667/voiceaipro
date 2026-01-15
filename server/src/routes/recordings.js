@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
     const result = await query(queryText, params);
 
     // Count only user's recordings
-    let countQuery = `
+    const countQuery = `
       SELECT COUNT(*) as total FROM recordings r
       JOIN call_sessions cs ON r.call_session_id = cs.id
       WHERE cs.user_id = $1

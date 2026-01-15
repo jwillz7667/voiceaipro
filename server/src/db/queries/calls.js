@@ -4,7 +4,7 @@
  * CRUD operations for call_sessions and call_events tables
  */
 
-import { query, transaction } from '../pool.js';
+import { query } from '../pool.js';
 import { createLogger } from '../../utils/logger.js';
 
 const logger = createLogger('db:calls');
@@ -307,7 +307,7 @@ export async function logCallEvent(data) {
  * @param {number} [durationSeconds] - Call duration in seconds
  * @returns {Promise<Object|null>} Updated call session or null if not found
  */
-export async function endCallSession(callSid, durationSeconds) {
+export function endCallSession(callSid, durationSeconds) {
   return updateCallSession(callSid, {
     status: 'completed',
     ended_at: new Date(),
