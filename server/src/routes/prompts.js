@@ -325,6 +325,13 @@ router.post('/', async (req, res) => {
   }
 });
 
+/**
+ * Update a prompt
+ * PUT /api/prompts/:id
+ * Body: { name?, instructions?, voice?, vad_config?, is_default? }
+ *
+ * Authorization: Users can only edit their own prompts, not system defaults
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -336,12 +343,94 @@ router.put('/:id', async (req, res) => {
       is_default,
     } = req.body;
 
-    const existing = await query('SELECT id FROM prompts WHERE id = $1', [id]);
+    // Fetch the existing prompt to check ownership
+    const existing = await query(
+      'SELECT id, user_id, is_default FROM prompts WHERE id = $1',
+      [id]
+    );
+
     if (existing.rows.length === 0) {
       return res.status(404).json({
         error: {
           code: 'PROMPT_NOT_FOUND',
           message: `Prompt not found: ${id}`,
+        },
+      });
+    }
+
+    const prompt = existing.rows[0];
+
+    // Check authorization - get user ID from auth or legacy device_id
+    let currentUserId = null;
+    if (req.user) {
+      currentUserId = req.user.id;
+    } else {
+      const deviceId = req.headers['x-device-id'] || req.body.device_id;
+      if (deviceId) {
+        const userResult = await query(
+          'SELECT id FROM users WHERE device_id = $1',
+          [deviceId]
+        );
+        if (userResult.rows.length > 0) {
+          currentUserId = userResult.rows[0].id;
+        }
+      }
+    }
+
+    // Prevent editing system default prompts (user_id is null)
+    if (prompt.user_id === null) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Cannot edit system default prompts. Duplicate it first to create your own copy.',
+        },
+      });
+    }
+
+    // Prevent editing other users' prompts
+    if (currentUserId !== prompt.user_id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own prompts',
+        },
+      });
+    }
+
+    // Validate fields
+    if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Name must be a non-empty string',
+        },
+      });
+    }
+
+    if (instructions !== undefined && (typeof instructions !== 'string' || instructions.trim().length === 0)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must be a non-empty string',
+        },
+      });
+    }
+
+    if (instructions !== undefined && instructions.length > 50000) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must not exceed 50000 characters',
+        },
+      });
+    }
+
+    const validVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin'];
+    if (voice !== undefined && !validVoices.includes(voice)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Voice must be one of: ${validVoices.join(', ')}`,
         },
       });
     }
@@ -352,7 +441,7 @@ router.put('/:id', async (req, res) => {
 
     if (name !== undefined) {
       updates.push(`name = $${paramIndex++}`);
-      params.push(name);
+      params.push(name.trim());
     }
 
     if (instructions !== undefined) {
@@ -396,7 +485,7 @@ router.put('/:id', async (req, res) => {
 
     const row = result.rows[0];
 
-    logger.info('Prompt updated', { id: row.id, name: row.name });
+    logger.info('Prompt updated', { id: row.id, name: row.name, userId: currentUserId });
 
     res.json({
       prompt: {
@@ -423,13 +512,31 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+/**
+ * Partially update a prompt (PATCH - same logic as PUT but more RESTful for partial updates)
+ * PATCH /api/prompts/:id
+ * Body: { name?, instructions?, voice?, vad_config?, is_default? }
+ */
+router.patch('/:id', async (req, res) => {
+  // PATCH uses the same logic as PUT for this implementation
+  // Forward to PUT handler by calling the same logic
   try {
     const { id } = req.params;
+    const {
+      name,
+      instructions,
+      voice,
+      vad_config,
+      is_default,
+    } = req.body;
 
-    const result = await query('DELETE FROM prompts WHERE id = $1 RETURNING id, name', [id]);
+    // Fetch the existing prompt to check ownership
+    const existing = await query(
+      'SELECT id, user_id, is_default FROM prompts WHERE id = $1',
+      [id]
+    );
 
-    if (result.rows.length === 0) {
+    if (existing.rows.length === 0) {
       return res.status(404).json({
         error: {
           code: 'PROMPT_NOT_FOUND',
@@ -438,7 +545,227 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    logger.info('Prompt deleted', { id, name: result.rows[0].name });
+    const prompt = existing.rows[0];
+
+    // Check authorization
+    let currentUserId = null;
+    if (req.user) {
+      currentUserId = req.user.id;
+    } else {
+      const deviceId = req.headers['x-device-id'] || req.body.device_id;
+      if (deviceId) {
+        const userResult = await query(
+          'SELECT id FROM users WHERE device_id = $1',
+          [deviceId]
+        );
+        if (userResult.rows.length > 0) {
+          currentUserId = userResult.rows[0].id;
+        }
+      }
+    }
+
+    // Prevent editing system default prompts
+    if (prompt.user_id === null) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Cannot edit system default prompts. Duplicate it first to create your own copy.',
+        },
+      });
+    }
+
+    // Prevent editing other users' prompts
+    if (currentUserId !== prompt.user_id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only edit your own prompts',
+        },
+      });
+    }
+
+    // Validate fields
+    if (name !== undefined && (typeof name !== 'string' || name.trim().length === 0)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Name must be a non-empty string',
+        },
+      });
+    }
+
+    if (instructions !== undefined && (typeof instructions !== 'string' || instructions.trim().length === 0)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must be a non-empty string',
+        },
+      });
+    }
+
+    if (instructions !== undefined && instructions.length > 50000) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Instructions must not exceed 50000 characters',
+        },
+      });
+    }
+
+    const validVoices = ['alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse', 'marin'];
+    if (voice !== undefined && !validVoices.includes(voice)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: `Voice must be one of: ${validVoices.join(', ')}`,
+        },
+      });
+    }
+
+    const updates = [];
+    const params = [];
+    let paramIndex = 1;
+
+    if (name !== undefined) {
+      updates.push(`name = $${paramIndex++}`);
+      params.push(name.trim());
+    }
+
+    if (instructions !== undefined) {
+      updates.push(`instructions = $${paramIndex++}`);
+      params.push(instructions);
+    }
+
+    if (voice !== undefined) {
+      updates.push(`voice = $${paramIndex++}`);
+      params.push(voice);
+    }
+
+    if (vad_config !== undefined) {
+      updates.push(`vad_config = $${paramIndex++}`);
+      params.push(vad_config);
+    }
+
+    if (is_default !== undefined) {
+      updates.push(`is_default = $${paramIndex++}`);
+      params.push(is_default);
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'NO_UPDATES',
+          message: 'No fields to update',
+        },
+      });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    params.push(id);
+
+    const result = await query(
+      `UPDATE prompts SET ${updates.join(', ')}
+       WHERE id = $${paramIndex}
+       RETURNING id, user_id, name, instructions, voice, vad_config, is_default, created_at, updated_at`,
+      params
+    );
+
+    const row = result.rows[0];
+
+    logger.info('Prompt patched', { id: row.id, name: row.name, userId: currentUserId });
+
+    res.json({
+      prompt: {
+        id: row.id,
+        user_id: row.user_id,
+        name: row.name,
+        instructions: row.instructions,
+        voice: row.voice,
+        vad_config: row.vad_config,
+        is_default: row.is_default,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      },
+    });
+  } catch (error) {
+    logger.error('Failed to patch prompt', { id: req.params.id, error });
+    res.status(500).json({
+      error: {
+        code: 'UPDATE_PROMPT_FAILED',
+        message: 'Failed to update prompt',
+        details: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * Delete a prompt
+ * DELETE /api/prompts/:id
+ *
+ * Authorization: Users can only delete their own prompts, not system defaults
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch the existing prompt to check ownership
+    const existing = await query(
+      'SELECT id, user_id, name FROM prompts WHERE id = $1',
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({
+        error: {
+          code: 'PROMPT_NOT_FOUND',
+          message: `Prompt not found: ${id}`,
+        },
+      });
+    }
+
+    const prompt = existing.rows[0];
+
+    // Check authorization
+    let currentUserId = null;
+    if (req.user) {
+      currentUserId = req.user.id;
+    } else {
+      const deviceId = req.headers['x-device-id'] || req.body.device_id;
+      if (deviceId) {
+        const userResult = await query(
+          'SELECT id FROM users WHERE device_id = $1',
+          [deviceId]
+        );
+        if (userResult.rows.length > 0) {
+          currentUserId = userResult.rows[0].id;
+        }
+      }
+    }
+
+    // Prevent deleting system default prompts
+    if (prompt.user_id === null) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'Cannot delete system default prompts',
+        },
+      });
+    }
+
+    // Prevent deleting other users' prompts
+    if (currentUserId !== prompt.user_id) {
+      return res.status(403).json({
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only delete your own prompts',
+        },
+      });
+    }
+
+    await query('DELETE FROM prompts WHERE id = $1', [id]);
+
+    logger.info('Prompt deleted', { id, name: prompt.name, userId: currentUserId });
 
     res.json({
       success: true,
