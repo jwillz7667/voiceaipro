@@ -19,6 +19,8 @@ router.post('/outgoing', (req, res) => {
     promptId,
     PromptId,  // iOS sends as PromptId
     configId,  // Reference ID to retrieve config from server-side store
+    SessionId, // iOS session UUID for event stream correlation
+    sessionId, // Alternative casing
     direction = 'outbound',
   } = req.body;
 
@@ -28,6 +30,9 @@ router.post('/outgoing', (req, res) => {
   // configId can come from body (URL params forwarded by Twilio) or query string
   const effectiveConfigId = configId || req.query.configId;
 
+  // iOS session UUID for correlating event stream subscriptions
+  const effectiveSessionId = SessionId || sessionId;
+
   logger.info('Outgoing call TwiML requested', {
     to: To,
     from: From,
@@ -35,6 +40,7 @@ router.post('/outgoing', (req, res) => {
     userId,
     promptId: effectivePromptId,
     configId: effectiveConfigId,
+    sessionId: effectiveSessionId,
   });
 
   // Log configId - config will be retrieved by twilioMediaHandler
@@ -67,6 +73,10 @@ router.post('/outgoing', (req, res) => {
   // twilioMediaHandler will retrieve full config from pending store
   if (effectiveConfigId) {
     stream.parameter({ name: 'configId', value: effectiveConfigId });
+  }
+  // Pass iOS session UUID for event stream correlation
+  if (effectiveSessionId) {
+    stream.parameter({ name: 'sessionId', value: effectiveSessionId });
   }
 
   res.type('text/xml');

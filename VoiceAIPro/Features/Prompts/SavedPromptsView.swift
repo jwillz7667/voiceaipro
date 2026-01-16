@@ -248,6 +248,15 @@ struct PromptRow: View {
                                 .font(.system(size: 12))
                                 .foregroundColor(.secondary)
                         }
+
+                        Button {
+                            onEdit()
+                        } label: {
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.system(size: 22))
+                                .foregroundStyle(.blue.opacity(0.8))
+                        }
+                        .buttonStyle(.plain)
                     }
 
                     Text(prompt.instructions)
