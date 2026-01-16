@@ -333,10 +333,15 @@ class CallManager: ObservableObject {
             print("🔴 [CallManager] Audio session activated")
 
             // Initiate call via API first (if needed for server-side setup)
-            // This notifies the server to prepare the bridge
+            // This notifies the server to prepare the bridge and returns the call SID
             print("🔴 [CallManager] Calling API initiateCall...")
-            _ = try await apiClient.initiateCall(to: phoneNumber, config: config)
-            print("🔴 [CallManager] API initiateCall completed")
+            let callResponse = try await apiClient.initiateCall(to: phoneNumber, config: config)
+            print("🔴 [CallManager] API initiateCall completed, callSid: \(callResponse.callSid)")
+
+            // Store the server-provided callSid immediately
+            var updatedSessionWithApiSid = session
+            updatedSessionWithApiSid.callSid = callResponse.callSid
+            currentSession = updatedSessionWithApiSid
 
             // Make the call via Twilio
             print("🔴 [CallManager] Making Twilio call...")
@@ -345,20 +350,17 @@ class CallManager: ObservableObject {
                 params: [
                     "SessionId": session.id.uuidString,
                     "PromptId": promptId?.uuidString ?? "",
-                    "Config": config.toJSON() ?? ""
+                    "Config": config.toJSON() ?? "",
+                    "CallSid": callResponse.callSid // Pass the server callSid to Twilio params
                 ]
             )
-            // Note: call.sid may be empty string immediately after connect, only populated after SIP signaling
-            let twilioSid: String? = call.sid.isEmpty ? nil : call.sid
-            print("🔴 [CallManager] Twilio call made, SID: \(twilioSid ?? "nil (pending)")")
-
-            // Update session with call SID (may be nil initially, updated when call connects)
-            var updatedSession = session
-            updatedSession.callSid = twilioSid
-            currentSession = updatedSession
+            // Note: call.sid from Twilio SDK may differ from server callSid
+            // We use the server-provided callSid for API calls
+            print("🔴 [CallManager] Twilio call made, local SID: \(call.sid.isEmpty ? "pending" : call.sid)")
+            print("🔴 [CallManager] Using server callSid for API: \(callResponse.callSid)")
 
             hasActiveCall = true
-            appState?.setActiveCall(session)
+            appState?.setActiveCall(currentSession!)
 
             // Use session UUID as callId since Twilio SID isn't available yet
             // The server will correlate this via the DeviceId parameter
@@ -390,24 +392,35 @@ class CallManager: ObservableObject {
 
     /// End the current call
     func endCall() async throws {
-        guard hasActiveCall else { return }
-
-        print("📞 [CallManager] Ending call...")
-        callState = .disconnecting
-
-        // End via server API first (this tells Twilio to terminate the call)
-        if let callSid = currentSession?.callSid {
-            print("📞 [CallManager] Calling server to end call: \(callSid)")
-            do {
-                try await apiClient.endCall(callSid: callSid)
-                print("📞 [CallManager] Server confirmed call ended")
-            } catch {
-                print("📞 [CallManager] Server end call failed: \(error), continuing with local disconnect")
-            }
+        guard hasActiveCall else {
+            print("📞 [CallManager] endCall called but no active call")
+            return
         }
 
-        // End via Twilio SDK (local disconnect)
+        print("📞 [CallManager] ========== ENDING CALL ==========")
+        print("📞 [CallManager] Current session: \(currentSession?.id.uuidString ?? "nil")")
+        print("📞 [CallManager] Call SID: \(currentSession?.callSid ?? "nil")")
+        callState = .disconnecting
+
+        // End via server API first (this tells Twilio to terminate the PSTN call)
+        if let callSid = currentSession?.callSid, !callSid.isEmpty {
+            print("📞 [CallManager] Calling server API to end call: \(callSid)")
+            do {
+                try await apiClient.endCall(callSid: callSid)
+                print("📞 [CallManager] ✅ Server confirmed call ended")
+            } catch {
+                print("📞 [CallManager] ⚠️ Server end call failed: \(error)")
+                // Continue with local disconnect even if server call fails
+            }
+        } else {
+            print("📞 [CallManager] ⚠️ No callSid available - cannot end call via server API!")
+            print("📞 [CallManager] This may leave the PSTN call active on Twilio's side")
+        }
+
+        // End via Twilio SDK (local disconnect - closes the WebSocket/media stream)
+        print("📞 [CallManager] Disconnecting local Twilio SDK...")
         twilioService.endCall()
+        print("📞 [CallManager] ✅ Local Twilio SDK disconnected")
 
         // Disconnect event stream
         webSocketService.disconnectEventStream()
