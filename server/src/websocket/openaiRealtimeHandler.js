@@ -1,12 +1,10 @@
 /**
- * OpenAI Realtime API Handler - GA Version (August 2025+)
+ * OpenAI Realtime API Handler
  *
  * This module manages the WebSocket connection to OpenAI's Realtime API for
- * bidirectional speech-to-speech AI conversations using gpt-realtime model.
+ * bidirectional speech-to-speech AI conversations using gpt-realtime-1.5 model.
  *
- * API VERSION: GA (General Availability)
- * - Beta API deprecated: February 27, 2026
- * - Model: gpt-realtime, gpt-realtime-mini
+ * - Model: gpt-realtime-1.5, gpt-realtime-1.5-mini
  * - See: https://platform.openai.com/docs/guides/realtime
  *
  * CONNECTION FLOW:
@@ -34,8 +32,8 @@
  * - input_audio_buffer.speech_started/stopped/committed
  * - conversation.item.created, conversation.item.input_audio_transcription.completed
  * - response.created, response.output_item.added
- * - response.audio.delta, response.audio.done (GA also: response.output_audio.*)
- * - response.audio_transcript.delta/done
+ * - response.output_audio.delta, response.output_audio.done
+ * - response.output_audio_transcript.delta/done
  * - response.done, response.cancelled
  * - rate_limits.updated, error
  */
@@ -346,7 +344,7 @@ function sendSessionConfig(session) {
       noiseReduction: session.config.noiseReduction,
       transcriptionModel: session.config.transcriptionModel,
     },
-    // What we're sending to OpenAI (GA nested format - August 2025+)
+    // What we're sending to OpenAI (nested format)
     openAIConfig: {
       type: sessionConfig.type,
       output_modalities: sessionConfig.output_modalities,
@@ -386,32 +384,11 @@ function sendSessionConfig(session) {
 
 /**
  * Build OpenAI session configuration from our config format
- * Maps our configuration schema to OpenAI's gpt-realtime GA format
+ * Maps our configuration schema to OpenAI's gpt-realtime-1.5 format
  * See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
- * See: https://platform.openai.com/docs/guides/realtime
- *
- * GA format structure (August 2025+):
- * {
- *   type: "realtime",
- *   instructions: "...",
- *   output_modalities: ["audio"],
- *   audio: {
- *     input: {
- *       turn_detection: { type, eagerness, ... },
- *       noise_reduction: { type: "near_field" | "far_field" } // optional
- *     },
- *     output: {
- *       voice: "marin" | "cedar",
- *       speed: 1.0
- *     }
- *   }
- * }
- *
- * NOTE: GA interface removed 'temperature' as a model parameter.
- * Beta API will be deprecated February 27, 2026.
  */
 function buildSessionConfig(cfg) {
-  // GA gpt-realtime session.update
+  // gpt-realtime-1.5 session.update
   const sessionConfig = {
     // Required: Session type - 'realtime' for speech-to-speech
     type: 'realtime',
@@ -495,8 +472,8 @@ function buildSessionConfig(cfg) {
     sessionConfig.audio.output.speed = cfg.voiceSpeed;
   }
 
-  // NOTE: maxOutputTokens is not sent in GA session.update
-  // NOTE: temperature is removed in GA interface (was 0.6-1.2 in beta, default 0.8)
+  // NOTE: maxOutputTokens is not sent in session.update
+  // NOTE: temperature is not configurable
 
   return sessionConfig;
 }
@@ -540,7 +517,7 @@ function handleOpenAIMessage(session, message, state) {
   // Log important events from OpenAI (reduced logging to avoid Railway rate limit)
   const importantEvents = ['session.created', 'session.updated', 'error', 'response.created',
     'response.done', 'input_audio_buffer.speech_started', 'input_audio_buffer.speech_stopped',
-    'input_audio_buffer.committed', 'response.audio.delta', 'response.output_audio.delta'];
+    'input_audio_buffer.committed', 'response.output_audio.delta'];
   if (importantEvents.includes(eventType) || message.error) {
     logger.info(`🔷 [OPENAI] Event: ${eventType}`, {
       callSid: session.callSid,
@@ -590,22 +567,18 @@ function handleOpenAIMessage(session, message, state) {
       handleOutputItemAdded(session, message, state);
       break;
 
-    case 'response.audio.delta':
     case 'response.output_audio.delta':
       handleAudioDelta(session, message, state);
       break;
 
-    case 'response.audio.done':
     case 'response.output_audio.done':
       handleAudioDone(session, message, state);
       break;
 
-    case 'response.audio_transcript.delta':
     case 'response.output_audio_transcript.delta':
       handleTranscriptDelta(session, message, state);
       break;
 
-    case 'response.audio_transcript.done':
     case 'response.output_audio_transcript.done':
       handleTranscriptDone(session, message, state);
       break;

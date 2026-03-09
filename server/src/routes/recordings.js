@@ -2,14 +2,9 @@ import { Router } from 'express';
 import { createLogger } from '../utils/logger.js';
 import { query } from '../db/pool.js';
 import * as recordingService from '../services/recordingService.js';
-import { optionalAuth, legacyDeviceSupport } from '../middleware/auth.js';
 
 const router = Router();
 const logger = createLogger('routes:recordings');
-
-// Apply auth middleware to all routes
-router.use(optionalAuth());
-router.use(legacyDeviceSupport());
 
 router.get('/', async (req, res) => {
   try {
@@ -19,19 +14,7 @@ router.get('/', async (req, res) => {
       call_sid,
     } = req.query;
 
-    // Get user identifier - authenticated user takes priority
-    const userId = req.user?.id || null;
-    const deviceId = req.legacyDeviceId || req.query.device_id || null;
-
-    // SECURITY: Must have either authenticated user or device_id
-    if (!userId && !deviceId) {
-      return res.status(401).json({
-        error: {
-          code: 'AUTH_REQUIRED',
-          message: 'Authentication or device_id required to view recordings',
-        },
-      });
-    }
+    const deviceId = req.query.device_id || null;
 
     let queryText = `
       SELECT r.id, r.call_session_id, r.storage_path, r.duration_seconds,
@@ -44,11 +27,8 @@ router.get('/', async (req, res) => {
     const params = [];
     let paramIndex = 1;
 
-    // Filter by authenticated user OR device_id
-    if (userId) {
-      queryText += ` AND cs.user_id = $${paramIndex++}`;
-      params.push(userId);
-    } else if (deviceId) {
+    // Filter by device_id
+    if (deviceId) {
       queryText += ` AND cs.user_id = $${paramIndex++}`;
       params.push(deviceId);
     }
@@ -63,13 +43,13 @@ router.get('/', async (req, res) => {
 
     const result = await query(queryText, params);
 
-    // Count only user's recordings
-    const countQuery = `
-      SELECT COUNT(*) as total FROM recordings r
-      JOIN call_sessions cs ON r.call_session_id = cs.id
-      WHERE cs.user_id = $1
-    `;
-    const countParams = [userId || deviceId];
+    // Count recordings
+    let countQuery = 'SELECT COUNT(*) as total FROM recordings r JOIN call_sessions cs ON r.call_session_id = cs.id';
+    const countParams = [];
+    if (deviceId) {
+      countQuery += ' WHERE cs.user_id = $1';
+      countParams.push(deviceId);
+    }
     const countResult = await query(countQuery, countParams);
 
     res.json({

@@ -2,18 +2,13 @@ import Foundation
 
 // MARK: - RealtimeConfig
 
-/// Configuration for OpenAI Realtime API session (GA - August 2025+)
+/// Configuration for OpenAI Realtime API session
 /// Matches the server-side configuration schema for seamless transmission
 ///
-/// API Version: GA (General Availability)
-/// - Beta API deprecated: February 27, 2026
-/// - Models: gpt-realtime, gpt-realtime-mini
+/// - Models: gpt-realtime-1.5, gpt-realtime-1.5-mini
 /// - See: https://platform.openai.com/docs/guides/realtime
-///
-/// NOTE: GA API removed `temperature` as a model parameter
-/// NOTE: `maxOutputTokens` not supported in GA session.update
 struct RealtimeConfig: Codable, Equatable {
-    var model: RealtimeModel = .gptRealtime
+    var model: RealtimeModel = .gptRealtime1_5
     var voice: RealtimeVoice = .marin
     var voiceSpeed: Double = 1.0
     // Semantic VAD is recommended for GA - context-aware speech detection
@@ -80,22 +75,22 @@ struct RealtimeConfig: Codable, Equatable {
 
 /// Available OpenAI Realtime models
 enum RealtimeModel: String, Codable, CaseIterable, Identifiable {
-    case gptRealtime = "gpt-realtime"
-    case gptRealtimeMini = "gpt-realtime-mini"
+    case gptRealtime1_5 = "gpt-realtime-1.5"
+    case gptRealtime1_5Mini = "gpt-realtime-1.5-mini"
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .gptRealtime: return "GPT Realtime"
-        case .gptRealtimeMini: return "GPT Realtime Mini"
+        case .gptRealtime1_5: return "GPT Realtime 1.5"
+        case .gptRealtime1_5Mini: return "GPT Realtime 1.5 Mini"
         }
     }
 
     var description: String {
         switch self {
-        case .gptRealtime: return "Full-featured model for complex conversations"
-        case .gptRealtimeMini: return "Faster, lighter model for simple tasks"
+        case .gptRealtime1_5: return "Full-featured model for complex conversations"
+        case .gptRealtime1_5Mini: return "Faster, lighter model for simple tasks"
         }
     }
 }

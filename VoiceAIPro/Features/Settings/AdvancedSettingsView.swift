@@ -22,7 +22,7 @@ struct AdvancedSettingsView: View {
             } header: {
                 Text("Model")
             } footer: {
-                Text(config.model == .gptRealtime
+                Text(config.model == .gptRealtime1_5
                     ? "Full-featured model for complex conversations"
                     : "Faster, lighter model for simple tasks")
             }
@@ -135,7 +135,7 @@ struct ModelRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 14) {
-                Image(systemName: model == .gptRealtime ? "cpu.fill" : "bolt.fill")
+                Image(systemName: model == .gptRealtime1_5 ? "cpu.fill" : "bolt.fill")
                     .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.blue)
                     .frame(width: 28)

@@ -2,66 +2,72 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('openai-service');
 
+/**
+ * Build session config in GA nested format for gpt-realtime-1.5
+ */
 export function buildSessionConfig(options = {}) {
   const {
     instructions = 'You are a helpful AI assistant. Respond naturally and conversationally.',
     voice = 'marin',
     voiceSpeed = 1.0,
-    vadType = 'server_vad',
+    vadType = 'semantic_vad',
     vadConfig = {},
     noiseReduction = null,
     transcriptionModel = 'gpt-4o-transcribe',
-    temperature = 0.8,
-    maxOutputTokens = 4096,
     tools = [],
   } = options;
 
   const sessionConfig = {
-    modalities: ['audio', 'text'],
+    type: 'realtime',
     instructions,
-    input_audio_format: 'pcm16',
-    output_audio_format: 'pcm16',
-    voice,
-    temperature,
-    max_response_output_tokens: maxOutputTokens === 'inf' ? 'inf' : maxOutputTokens,
+    output_modalities: ['audio'],
+    audio: {
+      input: {},
+      output: {},
+    },
   };
 
-  if (voiceSpeed !== 1.0) {
-    sessionConfig.output_audio_speed = voiceSpeed;
-  }
-
+  // Audio input: transcription
   if (transcriptionModel) {
-    sessionConfig.input_audio_transcription = {
+    sessionConfig.audio.input.transcription = {
       model: transcriptionModel,
     };
   }
 
+  // Audio input: noise reduction
   if (noiseReduction) {
-    sessionConfig.input_audio_noise_reduction = {
-      type: noiseReduction,
-    };
+    sessionConfig.audio.input.noise_reduction = { type: noiseReduction };
   }
 
+  // Audio input: turn detection / VAD
   if (vadType === 'server_vad') {
-    sessionConfig.turn_detection = {
+    const turnDetection = {
       type: 'server_vad',
       threshold: vadConfig.threshold ?? 0.5,
       prefix_padding_ms: vadConfig.prefixPaddingMs ?? 300,
       silence_duration_ms: vadConfig.silenceDurationMs ?? 500,
       create_response: vadConfig.createResponse ?? true,
     };
-
     if (vadConfig.idleTimeoutMs) {
-      sessionConfig.turn_detection.idle_timeout_ms = vadConfig.idleTimeoutMs;
+      turnDetection.idle_timeout_ms = vadConfig.idleTimeoutMs;
     }
+    sessionConfig.audio.input.turn_detection = turnDetection;
   } else if (vadType === 'semantic_vad') {
-    sessionConfig.turn_detection = {
+    sessionConfig.audio.input.turn_detection = {
       type: 'semantic_vad',
-      eagerness: vadConfig.eagerness ?? 'auto',
+      eagerness: vadConfig.eagerness ?? 'high',
       create_response: vadConfig.createResponse ?? true,
     };
   } else if (vadType === 'disabled') {
-    sessionConfig.turn_detection = null;
+    sessionConfig.audio.input.turn_detection = null;
+  }
+
+  // Audio output: voice
+  sessionConfig.audio.output.voice = voice;
+
+  // Audio output: speed
+  if (voiceSpeed !== 1.0) {
+    sessionConfig.audio.output.speed = voiceSpeed;
   }
 
   if (tools && tools.length > 0) {
@@ -193,20 +199,17 @@ export function parseOpenAIEvent(eventData) {
         parsed.status = event.response?.status;
         break;
 
-      case 'response.audio.delta':
       case 'response.output_audio.delta':
         parsed.audio = event.delta;
         parsed.responseId = event.response_id;
         parsed.itemId = event.item_id;
         break;
 
-      case 'response.audio_transcript.delta':
       case 'response.output_audio_transcript.delta':
         parsed.transcript = event.delta;
         parsed.responseId = event.response_id;
         break;
 
-      case 'response.audio_transcript.done':
       case 'response.output_audio_transcript.done':
         parsed.transcript = event.transcript;
         parsed.responseId = event.response_id;
@@ -259,8 +262,8 @@ export const AVAILABLE_VOICES = [
 ];
 
 export const AVAILABLE_MODELS = [
-  { id: 'gpt-realtime', name: 'GPT Realtime', description: 'Full capability realtime model' },
-  { id: 'gpt-realtime-mini', name: 'GPT Realtime Mini', description: 'Faster, more cost-effective' },
+  { id: 'gpt-realtime-1.5', name: 'GPT Realtime 1.5', description: 'Full capability realtime model' },
+  { id: 'gpt-realtime-1.5-mini', name: 'GPT Realtime 1.5 Mini', description: 'Faster, more cost-effective' },
 ];
 
 export const VAD_TYPES = [

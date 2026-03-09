@@ -255,36 +255,17 @@ class APIClient: APIClientProtocol {
     private let deviceId: String
     private var accessToken: String?
     private var tokenExpiry: Date?
-    private let keychain = KeychainManager.shared
-
     init(baseURL: String, deviceId: String) {
         self.baseURL = baseURL
         self.deviceId = deviceId
     }
 
-    // MARK: - Auth Header Helper
-
-    /// Add authentication header to request if user is authenticated
-    private func addAuthHeader(to request: inout URLRequest) async {
-        // Try to get valid auth token
-        if keychain.isAuthenticated {
-            do {
-                let token = try await AuthService.shared.getValidAccessToken()
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            } catch {
-                // Fall back to no auth if token refresh fails
-                print("Failed to get auth token: \(error)")
-            }
-        }
-    }
-
-    /// Create a request with optional auth
-    private func createRequest(url: URL, method: String = "GET") async -> URLRequest {
+    /// Create a request with device ID header
+    private func createRequest(url: URL, method: String = "GET") -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(deviceId, forHTTPHeaderField: "X-Device-ID")
-        await addAuthHeader(to: &request)
         return request
     }
 
@@ -371,7 +352,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -393,7 +374,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -415,7 +396,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         // Download the file
         let (tempURL, response) = try await URLSession.shared.download(for: request)
@@ -450,7 +431,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -472,7 +453,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -494,7 +475,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = await createRequest(url: url, method: "POST")
+        var request = createRequest(url: url, method: "POST")
 
         var body: [String: Any] = [
             "name": name,
@@ -529,7 +510,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = await createRequest(url: url, method: "PUT")
+        var request = createRequest(url: url, method: "PUT")
 
         var body: [String: Any] = [:]
         if let name = name { body["name"] = name }
@@ -609,7 +590,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        let request = await createRequest(url: url, method: "GET")
+        let request = createRequest(url: url, method: "GET")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 
@@ -630,7 +611,7 @@ class APIClient: APIClientProtocol {
             throw APIError.invalidURL
         }
 
-        var request = await createRequest(url: url, method: "POST")
+        var request = createRequest(url: url, method: "POST")
 
         let body: [String: Any] = [
             "instructions": instructions

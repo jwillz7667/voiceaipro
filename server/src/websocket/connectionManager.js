@@ -24,13 +24,12 @@ class CallSession {
     // Event stream subscribers for this session
     this.eventSubscribers = new Set();
 
-    // Session configuration - aligned with OpenAI Realtime API GA (August 2025+)
+    // Session configuration - aligned with OpenAI Realtime API
     // See: https://platform.openai.com/docs/api-reference/realtime-client-events/session/update
-    // NOTE: Beta API will be deprecated February 27, 2026
     this.config = {
-      // Model: gpt-realtime (GA), gpt-realtime-mini, or gpt-realtime-2025-08-28 for EU
-      model: 'gpt-realtime',
-      // Voices: marin and cedar are recommended for GA; also available: alloy, echo, shimmer, ash, ballad, coral, sage, verse
+      // Model: gpt-realtime-1.5, gpt-realtime-1.5-mini
+      model: 'gpt-realtime-1.5',
+      // Voices: marin and cedar are recommended; also available: alloy, echo, shimmer, ash, ballad, coral, sage, verse
       voice: 'marin',
       voiceSpeed: 1.0,
       // VAD: semantic_vad (understands utterances), server_vad (silence-based), or disabled/none
@@ -44,8 +43,8 @@ class CallSession {
       noiseReduction: null,
       // Transcription model for user speech: gpt-4o-transcribe, gpt-4o-mini-transcribe, or whisper-1
       transcriptionModel: 'gpt-4o-transcribe',
-      // NOTE: temperature removed in GA interface (was 0.6-1.2 in beta)
-      // NOTE: maxOutputTokens not supported in GA session.update
+      // NOTE: temperature removed (not configurable)
+      // NOTE: maxOutputTokens not supported in session.update
       instructions: '',
       ...options.config,
     };
@@ -405,8 +404,6 @@ class ConnectionManager {
         model: session.config.model,
         vadType: session.config.vadType,
         vadConfig: session.config.vadConfig,
-        temperature: session.config.temperature,
-        maxOutputTokens: session.config.maxOutputTokens,
         voiceSpeed: session.config.voiceSpeed,
         transcriptionModel: session.config.transcriptionModel,
         instructionsLength: session.config.instructions?.length || 0,
